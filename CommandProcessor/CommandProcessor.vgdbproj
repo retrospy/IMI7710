@@ -1,0 +1,196 @@
+<?xml version="1.0"?>
+<VisualGDBProjectSettings2 xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Project xsi:type="com.visualgdb.project.external.arduino">
+    <CustomSourceDirectories>
+      <Directories />
+      <PathStyle>Unknown</PathStyle>
+    </CustomSourceDirectories>
+    <AutoProgramSPIFFSPartition>true</AutoProgramSPIFFSPartition>
+    <ProjectModeSettings>
+      <ProjectGUID>6940ff10-91c7-4846-b9f6-b3d97390e3e7</ProjectGUID>
+      <GroupSourcesByTypes>true</GroupSourcesByTypes>
+      <GroupSourcesByPaths>true</GroupSourcesByPaths>
+      <SketchSubdirectory>sketches</SketchSubdirectory>
+      <MainSketchFile>CommandProcessor.ino</MainSketchFile>
+      <RootSketchFolder>
+        <Subfolders />
+        <Files>
+          <string>CommandProcessor.ino</string>
+        </Files>
+      </RootSketchFolder>
+      <OtherFiles />
+    </ProjectModeSettings>
+  </Project>
+  <Build xsi:type="com.visualgdb.build.external.arduino">
+    <BuildLogMode xsi:nil="true" />
+    <IgnoreNormalLibraryDirectories>false</IgnoreNormalLibraryDirectories>
+    <OutputSubdirectory>Output\$(PlatformName.defuse)\$(ConfigurationName.defuse)</OutputSubdirectory>
+    <EnableVerboseBuild>false</EnableVerboseBuild>
+    <PreprocessorMacros />
+    <ExtraLinkerFlags>
+      <string>-Wl,-q</string>
+    </ExtraLinkerFlags>
+    <AutoBuildSPIFFSPartition>true</AutoBuildSPIFFSPartition>
+  </Build>
+  <CustomBuild>
+    <PreSyncActions />
+    <PreBuildActions />
+    <PostBuildActions />
+    <PreCleanActions />
+    <PostCleanActions />
+  </CustomBuild>
+  <CustomDebug>
+    <PreDebugActions />
+    <PostDebugActions />
+    <DebugStopActions />
+    <BreakMode>Default</BreakMode>
+  </CustomDebug>
+  <CustomShortcuts>
+    <Shortcuts />
+    <ShowMessageAfterExecuting>true</ShowMessageAfterExecuting>
+  </CustomShortcuts>
+  <UserDefinedVariables />
+  <CodeSense>
+    <Enabled>Unknown</Enabled>
+    <ExtraSettings>
+      <HideErrorsInSystemHeaders>true</HideErrorsInSystemHeaders>
+      <SupportLightweightReferenceAnalysis>true</SupportLightweightReferenceAnalysis>
+      <CheckForClangFormatFiles>true</CheckForClangFormatFiles>
+      <FormattingEngine xsi:nil="true" />
+    </ExtraSettings>
+    <CodeAnalyzerSettings>
+      <Enabled>false</Enabled>
+    </CodeAnalyzerSettings>
+  </CodeSense>
+  <Configurations>
+    <VisualGDBConfiguration>
+      <PlatformName>Raspberry_Pi_Pico</PlatformName>
+      <DebugSettingsOverride xsi:type="com.visualgdb.debug.embedded">
+        <AdditionalStartupCommands />
+        <AdditionalGDBSettings>
+          <Features>
+            <DisableAutoDetection>false</DisableAutoDetection>
+            <UseFrameParameter>false</UseFrameParameter>
+            <SimpleValuesFlagSupported>false</SimpleValuesFlagSupported>
+            <ListLocalsSupported>false</ListLocalsSupported>
+            <ByteLevelMemoryCommandsAvailable>false</ByteLevelMemoryCommandsAvailable>
+            <ThreadInfoSupported>false</ThreadInfoSupported>
+            <PendingBreakpointsSupported>false</PendingBreakpointsSupported>
+            <SupportTargetCommand>false</SupportTargetCommand>
+            <ReliableBreakpointNotifications>false</ReliableBreakpointNotifications>
+          </Features>
+          <EnableSmartStepping>false</EnableSmartStepping>
+          <FilterSpuriousStoppedNotifications>false</FilterSpuriousStoppedNotifications>
+          <ForceSingleThreadedMode>false</ForceSingleThreadedMode>
+          <UseAppleExtensions>false</UseAppleExtensions>
+          <CanAcceptCommandsWhileRunning>false</CanAcceptCommandsWhileRunning>
+          <MakeLogFile>false</MakeLogFile>
+          <IgnoreModuleEventsWhileStepping>true</IgnoreModuleEventsWhileStepping>
+          <UseRelativePathsOnly>false</UseRelativePathsOnly>
+          <ExitAction>None</ExitAction>
+          <DisableDisassembly>false</DisableDisassembly>
+          <ExamineMemoryWithXCommand>false</ExamineMemoryWithXCommand>
+          <StepIntoNewInstanceEntry>main</StepIntoNewInstanceEntry>
+          <ExamineRegistersInRawFormat>true</ExamineRegistersInRawFormat>
+          <DisableSignals>false</DisableSignals>
+          <EnableAsyncExecutionMode>false</EnableAsyncExecutionMode>
+          <AsyncModeSupportsBreakpoints>true</AsyncModeSupportsBreakpoints>
+          <TemporaryBreakConsolidationTimeout>0</TemporaryBreakConsolidationTimeout>
+          <EnableNonStopMode>false</EnableNonStopMode>
+          <MaxBreakpointLimit>0</MaxBreakpointLimit>
+          <EnableVerboseMode>true</EnableVerboseMode>
+          <EnablePrettyPrinters>false</EnablePrettyPrinters>
+          <EnableAbsolutePathReporting>true</EnableAbsolutePathReporting>
+        </AdditionalGDBSettings>
+        <DebugMethod>
+          <ID>gdbsim</ID>
+          <Configuration>
+            <Entries />
+          </Configuration>
+        </DebugMethod>
+        <AutoDetectRTOS>true</AutoDetectRTOS>
+        <SemihostingSupport>Auto</SemihostingSupport>
+        <SemihostingPollingDelay>0</SemihostingPollingDelay>
+        <StepIntoEntryPoint>false</StepIntoEntryPoint>
+        <ReloadFirmwareOnReset>false</ReloadFirmwareOnReset>
+        <ValidateEndOfStackAddress>true</ValidateEndOfStackAddress>
+        <StopAtEntryPoint>false</StopAtEntryPoint>
+        <EnableVirtualHalts>false</EnableVirtualHalts>
+        <DynamicAnalysisSettings />
+        <EndOfStackSymbol>_estack</EndOfStackSymbol>
+        <TimestampProviderTicksPerSecond>0</TimestampProviderTicksPerSecond>
+        <KeepConsoleAfterExit>false</KeepConsoleAfterExit>
+        <UnusedStackFillPattern xsi:nil="true" />
+        <SoftwareTracingSettings>
+          <TraceWhileDebugging>true</TraceWhileDebugging>
+          <AutoStart>false</AutoStart>
+          <DynamicProgramAreaSize>0</DynamicProgramAreaSize>
+          <SkipInitiallyDisabledTracepoints>false</SkipInitiallyDisabledTracepoints>
+          <TraceProgramOptimization>Size</TraceProgramOptimization>
+          <OutputMode>NonBlocking</OutputMode>
+          <AssumeFramePointerIsValid>true</AssumeFramePointerIsValid>
+          <InstrumentWithNoFeasibleTracepoints>false</InstrumentWithNoFeasibleTracepoints>
+          <MaximumStringLength>255</MaximumStringLength>
+          <DeferVectorTablePatching>true</DeferVectorTablePatching>
+          <ShowAdvancedConfiguration>false</ShowAdvancedConfiguration>
+          <WorkAreaSize>4096</WorkAreaSize>
+          <DisableLiveCodePatching>false</DisableLiveCodePatching>
+        </SoftwareTracingSettings>
+        <CheckInterfaceDrivers>true</CheckInterfaceDrivers>
+      </DebugSettingsOverride>
+      <BuildSettingsExtension xsi:type="com.visualgdb.build.external.arduino.extension">
+        <BoardID>rp2040:rp2040:rpipico</BoardID>
+        <COMPort />
+        <Properties>
+          <Entries>
+            <KeyValue>
+              <Key>flash</Key>
+              <Value>2097152_0</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>freq</Key>
+              <Value>133</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>opt</Key>
+              <Value>Small</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>rtti</Key>
+              <Value>Disabled</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>stackprotect</Key>
+              <Value>Disabled</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>exceptions</Key>
+              <Value>Disabled</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>dbgport</Key>
+              <Value>Disabled</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>dbglvl</Key>
+              <Value>None</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>usbstack</Key>
+              <Value>picosdk</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>ipbtstack</Key>
+              <Value>ipv4only</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>uploadmethod</Key>
+              <Value>default</Value>
+            </KeyValue>
+          </Entries>
+        </Properties>
+        <DebugUnoptimizedComponentTypes>Sketch</DebugUnoptimizedComponentTypes>
+      </BuildSettingsExtension>
+    </VisualGDBConfiguration>
+  </Configurations>
+</VisualGDBProjectSettings2>

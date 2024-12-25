@@ -1,0 +1,21 @@
+<!-- Add this file to source control in order to automatically restore library dependencies when opening the project on another machine -->
+<ArduinoDependencyCollection xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Dependencies>
+    <Dependency>
+      <Type>Platform</Type>
+      <Key>
+        <Packager>rp2040</Packager>
+        <Name>rp2040</Name>
+        <Version>4.4.0</Version>
+      </Key>
+    </Dependency>
+    <Dependency>
+      <Type>Library</Type>
+      <Key>
+        <Packager>Khoi Hoang &lt;khoih.prog@gmail.com&gt;</Packager>
+        <Name>RPI_PICO_TimerInterrupt</Name>
+        <Version>1.3.1</Version>
+      </Key>
+    </Dependency>
+  </Dependencies>
+</ArduinoDependencyCollection>
