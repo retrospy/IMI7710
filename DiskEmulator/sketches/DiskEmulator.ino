@@ -426,5 +426,19 @@ void loop()
 
 void loop1()
 {
+	while ((statusRegister1 | REG1_SEEKING) == 0) ;
 	
+	headAddressRegister = incomingHeadAddress;
+	cylinderAddressRegister = incomingCylinderAddress;
+	
+	if (loadTrack())
+	{
+		statusRegister1 |= REG1_ON_CYLINDER;
+	}
+	
+	statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
+	
+	digitalWrite(SEEK_COMPLETE, HIGH);
+	delayMicroseconds(3);
+	digitalWrite(SEEK_COMPLETE, LOW);
 }

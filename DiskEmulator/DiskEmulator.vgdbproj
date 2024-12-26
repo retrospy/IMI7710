@@ -50,6 +50,7 @@
     <ShowMessageAfterExecuting>true</ShowMessageAfterExecuting>
   </CustomShortcuts>
   <UserDefinedVariables />
+  <ImportedPropertySheets />
   <CodeSense>
     <Enabled>Unknown</Enabled>
     <ExtraSettings>
@@ -149,11 +150,11 @@
             </KeyValue>
             <KeyValue>
               <Key>freq</Key>
-              <Value>133</Value>
+              <Value>240</Value>
             </KeyValue>
             <KeyValue>
               <Key>opt</Key>
-              <Value>Small</Value>
+              <Value>Optimize3</Value>
             </KeyValue>
             <KeyValue>
               <Key>rtti</Key>
@@ -193,4 +194,5 @@
       </BuildSettingsExtension>
     </VisualGDBConfiguration>
   </Configurations>
+  <ProgramArgumentsSuggestions />
 </VisualGDBProjectSettings2>
