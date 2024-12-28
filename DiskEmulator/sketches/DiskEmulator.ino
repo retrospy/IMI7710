@@ -89,7 +89,7 @@ bool SectorIndexPulseISR(__unused struct repeating_timer *t)
 		mask |= (1 << SECTOR);
 	
 	gpio_set_mask(mask);
-	delayMicroseconds(3);
+	delayMicroseconds(4);
 	gpio_clr_mask(mask);
 	
 	return true;
@@ -229,7 +229,7 @@ void setup1()
 #endif
 	
 	// Start Index and Sector Pulse
-	ITimer.attachInterruptInterval(833500, SectorIndexPulseISR);
+	ITimer.attachInterruptInterval(833.5, SectorIndexPulseISR);
 	
 	for (int i = 0; i < 10800; ++i)
 		currentTrackData[i] = 0;
