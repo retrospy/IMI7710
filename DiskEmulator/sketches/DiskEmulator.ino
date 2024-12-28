@@ -23,12 +23,12 @@
 
 // Internal Control Bins
 #define READ_TRIG	0
-#define DRV_ACK		1
-#define WRITE_TRIG	15
+#define WRITE_TRIG	1
+#define DRV_ACK	15
 
 // Physical Drive Signals
 #define SECTOR 27
-#define SEEK_COMPLETE 25
+#define SEEK_COMPLETE 26
 #define INDEX 22
 #define FAULT 21
 
@@ -36,6 +36,10 @@
 #define RW_OUT 13
 #define RW_IN 20
 #define CLK 14
+
+#define LED 25
+
+#define SDPIN 17
 
 // HD Device ID
 #define ID 0
@@ -68,7 +72,10 @@ volatile byte statusRegister2 = 0;
 #define REG2_WRITE_PROT		0x10
 #define REG2_GUARD_BAND		0x80
 
-byte currentTrackData[10800];
+volatile byte currentTrackData[10800];
+volatile bool flushTrack = false;
+
+PIO rw_pio = pio0;
 
 bool SectorIndexPulseISR(__unused struct repeating_timer *t)
 {
@@ -88,47 +95,72 @@ bool SectorIndexPulseISR(__unused struct repeating_timer *t)
 	return true;
 }
 
-unsigned long powerOnTime;
+volatile bool setupHandshake = false;
 
 void setup()
-{
-	statusRegister1 |= REG1_REZEROING | REG1_SEEKING;
-	statusRegister2 |= REG2_POR;
-	powerOnTime = millis();
+{	
+	// Setup internal control signal
+	gpio_init_mask(1 << DRV_ACK);
+	gpio_set_dir_out_masked(1 << DRV_ACK);
+	gpio_clr_mask(1 << DRV_ACK);
+
+#ifdef DEBUG
+	Serial.begin(115200);
+	while (!Serial) ;
+#endif
+	
+	statusRegister1 |= REG1_REZEROING & REG1_SEEKING;
+	
+	setupHandshake = true;
+	
+#ifdef DEBUG
+	Serial.print("Waiting for disk to \"spin up\"...");
+#endif
+	
+	while (setupHandshake) ;
+	
+#ifdef DEBUG
+	Serial.println("...Disk is finished \"spinning up\".");
+#endif
 	
 	// Setup Command Bus
-	pinMode(CMD_RW, INPUT);
-	pinMode(CMD_SEL1, INPUT);
-	pinMode(CMD_SEL0, INPUT);
+	gpio_init_mask(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
 	
-	for (int i = 0; i < 8; ++i)
-	{
-		pinMode(BUS_0 + i, INPUT);
-	}
+	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
 	
-	pinMode(CMD_STROBE, INPUT);
-	
-	// Setup internal control signals
-	pinMode(DRV_ACK, OUTPUT);
-	digitalWrite(DRV_ACK, LOW);
-	pinMode(READ_TRIG, INPUT);
-	pinMode(WRITE_TRIG, INPUT);
+	//TODO: These would be PIO signals
+	//gpio_set_dir_in_masked(1 << READ_TRIG | 1 << WRITE_TRIG);
 	
 	// Setup differential signals
-	pinMode(RW_IN, INPUT);
-	pinMode(RW_OUT, OUTPUT);
-	digitalWrite(RW_OUT, LOW);
-	pinMode(CLK, INPUT);
+	// TODO: These would be set up as PIO signals
+	//gpio_set_dir_in_masked(1 << RW_IN);
+	//gpio_set_dir_out_masked(1 << RW_OUT);
+	//gpio_clr_mask(1 << RW_OUT);
+	//gpio_set_dir_in_masked(1 << CLK);
+	
+#ifdef DEBUG
+	Serial.printf("Disk is spun up.  Starting Command Processor...\r\n");
+#endif
+	
+	gpio_set_mask(1 << DRV_ACK);
+	delay(500);
+	gpio_clr_mask(1 << DRV_ACK);
+	
+	// Mark setup finished, by lighting LED
+	gpio_init_mask(1 << LED);
+	gpio_set_dir_out_masked(1 << LED);
+	gpio_set_mask(1 << LED);
+	
 	
 }
 
 bool loadTrack()
 {
 	File f = SD.open("hd0.img", FILE_READ);
-	if (f)
+	if (!f)
 	{
-		statusRegister2 |= REG1_RW_FAULT;
-		digitalWrite(FAULT, HIGH);
+		statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
@@ -136,29 +168,29 @@ bool loadTrack()
 	{
 		f.close();
 		statusRegister2 |= REG1_RW_FAULT;
-		digitalWrite(FAULT, HIGH);
+		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
-	if (!f.read(currentTrackData, 10800))
+	if (!f.read((uint8_t*)currentTrackData, 10800))
 	{
 		f.close();
 		statusRegister2 |= REG1_RW_FAULT;
-		digitalWrite(FAULT, HIGH);
+		gpio_set_mask(1 << FAULT);
 		return false;		
 	}
 	f.close();
 	
-	return true;
+	return false;
 }
 
 bool saveTrack()
 {
 	File f = SD.open("hd0.img", FILE_WRITE);
-	if (f)
+	if (!f)
 	{
 		statusRegister2 |= REG1_RW_FAULT;
-		digitalWrite(FAULT, HIGH);
+		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
@@ -166,15 +198,15 @@ bool saveTrack()
 	{
 		f.close();
 		statusRegister2 |= REG1_RW_FAULT;
-		digitalWrite(FAULT, HIGH);
+		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
-	if (!f.write(currentTrackData, 10800))
+	if (!f.write((const uint8_t*)currentTrackData, 10800))
 	{
 		f.close();
 		statusRegister2 |= REG1_RW_FAULT;
-		digitalWrite(FAULT, HIGH);
+		gpio_set_mask(1 << FAULT);
 		return false;		
 	}
 	f.close();
@@ -184,33 +216,124 @@ bool saveTrack()
 
 void setup1()
 {
+	bool rwFailure = false;
+	while (!setupHandshake) ;
+	
 	// Setup Drive Signals
-	pinMode(SECTOR, OUTPUT);
-	digitalWrite(SECTOR, LOW);
-	pinMode(SEEK_COMPLETE, OUTPUT);
-	digitalWrite(SEEK_COMPLETE, LOW);
-	pinMode(INDEX, OUTPUT);
-	digitalWrite(INDEX, LOW);
-	pinMode(FAULT, OUTPUT);
-	digitalWrite(FAULT, LOW);
+	gpio_init_mask(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
+	gpio_set_dir_out_masked(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
+	gpio_clr_mask(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
+	
+#ifdef DEBUG
+	Serial.println("Start Index and Sector Pulse");
+#endif
 	
 	// Start Index and Sector Pulse
 	ITimer.attachInterruptInterval(833500, SectorIndexPulseISR);
 	
-	if (!SD.exists("hd0.img"))
+	for (int i = 0; i < 10800; ++i)
+		currentTrackData[i] = 0;
+	
+	if (!SD.begin(SDPIN))
 	{
-		File f = SD.open("hd0.img", FILE_WRITE);
-		for (int i = 0; i < 1140; ++i)
-			f.write(currentTrackData, 10800);
-		f.close();
+#ifdef DEBUG
+		Serial.println("Error intializing SD card.");
+#endif
+		statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+		gpio_set_mask(1 << FAULT);
 	}
+	else
+	{
+#ifdef DEBUG
+		Serial.println("SD card intialized.");
+#endif	
+		if (!SD.exists("hd0.img"))
+		{
+#ifdef DEBUG
+			Serial.println("hd0.img not found, creating hd0.img.");
+#endif
+			File f = SD.open("hd0.img", FILE_WRITE);
+			if (!f)
+			{
+				rwFailure = true;
+				statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+				gpio_set_mask(1 << FAULT);
+			}
+			else
+			{
+				for (int i = 0; i < 1140; ++i)
+				{
+					int wrote = f.write((const uint8_t*)currentTrackData, 10800);
+					if (wrote < 10800)
+					{
+						rwFailure = true;
+						statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+						gpio_set_mask(1 << FAULT);
+						break;
+					}
+					
+				}
+				
+				if (!rwFailure)
+				{
+#ifdef DEBUG
+					Serial.println("Sized hd0.img to 12312000 bytes.");
+#endif	
+					// Place the sync bit in the first 20 sectors
+					for (int i = 0; i < 20; ++i)
+					{
+						bool didSeek = f.seek((i * 540) + 25);
+						if (!didSeek)
+						{
+							rwFailure = true;
+							statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+							gpio_set_mask(1 << FAULT);
+							break;
+						}
+						else
+						{
+							int wrote = f.write((uint8_t)1);
+							if (wrote != 1)
+							{
+								rwFailure = true;
+								statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+								gpio_set_mask(1 << FAULT);
+								break;
+							}
+							else
+							{
+#ifdef DEBUG
+								Serial.println("Added initial sync bits.");
+#endif
+								f.close();
+							}
+						}
+
+					}
+				}
+			}
+		}
+		else
+		{
+#ifdef DEBUG
+			Serial.println("hd0.img found.");
+#endif
+		}
+		
+		if (!rwFailure)
+		{
+			
+			cylinderAddressRegister = 0;
+			headAddressRegister = 0;
+			loadTrack();
 	
-	cylinderAddressRegister = 0;
-	headAddressRegister = 0;
-	loadTrack();
+			statusRegister1 |= REG1_ON_CYLINDER;
+			statusRegister1 &= ~REG1_REZEROING & ~REG1_SEEKING;
+		}
+	}
+
 	
-	statusRegister1 |= REG1_ON_CYLINDER;
-	statusRegister1 &= ~REG1_REZEROING & ~REG1_SEEKING;
+	setupHandshake = false;
 }
 
 void setDataBusToOutput()
@@ -260,13 +383,8 @@ void setIncomingHeadAddress(int data)
 
 void loop()
 {
-	if ((statusRegister2 & REG2_POR) != 0 && millis() - powerOnTime > 12000)
-	{
-		statusRegister2 &= ~REG2_POR;
-		statusRegister1 |= REG1_READY;
-	}
-	
-	while (!digitalRead(CMD_STROBE)) ;
+
+	while (!gpio_get(CMD_STROBE)) ;
 #ifdef DEBUG
 	Serial.println("CMD_STROBE went HIGH");
 #endif
@@ -298,15 +416,6 @@ void loop()
 #ifdef DEBUG
 			Serial.println("Setting Head and High bits of CylinderRegister");
 #endif
-			if (incomingCylinderAddress > 353)
-			{
-				statusRegister1 |= REG1_ILLEGAL_ADDRESS;
-			}
-			else
-			{
-				statusRegister1 &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER;
-				statusRegister1 |= REG1_SEEKING;
-			}
 		}
 		else
 		{
@@ -334,7 +443,33 @@ void loop()
 	case 2:  // CMD BYTE 2
 		if (isSelected)
 		{
-			// Start Read or Write
+			//			
+			//			while (!readGate) ;
+			//			
+			//			// Short Read
+			//			int sectorNum = currentSector;
+			//			for (int i = 0; i < 25; ++i)
+			//			{
+			//				// put_byte_block(currentTrackData[sectorNum * 540])
+			//			}
+			//			
+			//			while (!readGate && !writeGate && cmdStrobe) ;
+			//			
+			//			if (readGate)
+			//			{
+			//				for (int i = 0; i < 540; ++i)
+			//				{
+			//					//put_byte_block(currentTrackData[sectorNum * 540])
+			//				}
+			//			}
+			//			else if (writeGate)
+			//			{
+			//				int sectorNum = currentSector;
+			//				for (int i = 0; i < 540; ++i)
+			//				{
+			//					//currentTrackData[sectorNum * 540] = get_byte_block;
+			//				}				
+			//			}
 		}
 		break;
 	case 6:  // CMD BYTE 3
@@ -347,7 +482,7 @@ void loop()
 #endif
 				incomingCylinderAddress = 0;
 				incomingHeadAddress = 0;
-				digitalWrite(FAULT, LOW);
+				gpio_clr_mask(1 << FAULT);
 				statusRegister1 &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER & ~REG1_RW_FAULT;
 				statusRegister1 |= REG1_SEEKING | REG1_REZEROING;
 			}
@@ -357,7 +492,8 @@ void loop()
 				Serial.println("Clearing Fault");
 #endif
 				statusRegister1 &= ~REG1_RW_FAULT;
-				digitalWrite(FAULT, LOW);
+				statusRegister2 &= ~REG2_RW_UNSAFE;
+				gpio_clr_mask(1 << FAULT);
 			}
 		}
 		break;
@@ -404,12 +540,15 @@ void loop()
 		break;
 	}
 	
+	if (command != 2)
+	{
 #ifdef DEBUG
-	Serial.println("Setting DRV_ACK HIGH");
+		Serial.println("Setting DRV_ACK HIGH");
 #endif
-	digitalWrite(DRV_ACK, HIGH);	
-	
-	while (digitalRead(CMD_STROBE)) ;
+		gpio_set_mask(1 << DRV_ACK);	
+	}
+
+	while (gpio_get(CMD_STROBE)) ;
 #ifdef DEBUG
 	Serial.println("CMD_STROBE went LOW");
 #endif
@@ -418,27 +557,42 @@ void loop()
 	Serial.println("Setting bus pins back to INPUT");
 #endif
 	setDataBusToInput();
+	
 #ifdef DEBUG
 	Serial.println("Setting DRV_ACK LOW");
 #endif
-	digitalWrite(DRV_ACK, LOW);
+	gpio_clr_mask(1 << DRV_ACK);
 }
 
 void loop1()
-{
-	while ((statusRegister1 | REG1_SEEKING) == 0) ;
-	
-	headAddressRegister = incomingHeadAddress;
-	cylinderAddressRegister = incomingCylinderAddress;
-	
-	if (loadTrack())
+{	
+	if (flushTrack)
 	{
-		statusRegister1 |= REG1_ON_CYLINDER;
+		saveTrack();
+		flushTrack = false;
 	}
 	
-	statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
+	if ((statusRegister1 & REG1_SEEKING) != 0)
+	{
+		if (headAddressRegister != incomingHeadAddress || cylinderAddressRegister != incomingCylinderAddress)
+		{
+			headAddressRegister = incomingHeadAddress;
+			cylinderAddressRegister = incomingCylinderAddress;
 	
-	digitalWrite(SEEK_COMPLETE, HIGH);
-	delayMicroseconds(3);
-	digitalWrite(SEEK_COMPLETE, LOW);
+			if (loadTrack())
+			{
+				statusRegister1 |= REG1_ON_CYLINDER;
+			}
+		}
+		else
+		{
+			statusRegister1 |= REG1_ON_CYLINDER;
+		}
+		
+		statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
+		
+		gpio_set_mask(1 << SEEK_COMPLETE);
+		delayMicroseconds(3);
+		gpio_clr_mask(1 << SEEK_COMPLETE);                                                                                                                                                                                           
+	}
 }
