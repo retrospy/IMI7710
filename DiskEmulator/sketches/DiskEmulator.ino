@@ -3,6 +3,12 @@
 #include <RPi_Pico_ISR_Timer.hpp>
 #include <SD.h>
 
+#include "read_data.h"
+#include "write_data.h"
+#include "read_trig.h"
+#include "cmd_strobe_trig.h"
+#include "write_trig.h"
+
 #define DEBUG
 
 // Command Bus
@@ -24,7 +30,9 @@
 // Internal Control Bins
 #define READ_TRIG	0
 #define WRITE_TRIG	1
+#define SYS_CLOCK 14
 #define DRV_ACK	15
+
 
 // Physical Drive Signals
 #define SECTOR 27
@@ -97,10 +105,36 @@ bool SectorIndexPulseISR(__unused struct repeating_timer *t)
 
 volatile bool setupHandshake = false;
 
+volatile bool readTrigger = false;
+
+void readTrigISR()
+{
+	readTrigger = true;
+	pio_interrupt_clear(pio0, 0);
+}
+
+volatile bool cmdStrobeTrigger = false;
+
+void cmdStrobeTriggerISR()
+{
+	cmdStrobeTrigger = true;
+	pio_interrupt_clear(pio0, 1);
+}
+
+volatile bool writeTrigger = false;
+
+void writeTrigISR()
+{
+	writeTrigger = true;
+	pio_interrupt_clear(pio1, 0);
+}
+
 void setup()
 {	
-	// Setup internal control signal
-	gpio_init_mask(1 << DRV_ACK);
+	// Setup internal control signals
+	gpio_init_mask(1 << DRV_ACK | 1 << READ_TRIG | 1 << WRITE_TRIG | 1 << SYS_CLOCK);
+	gpio_set_dir_in_masked(1 << READ_TRIG | 1 << WRITE_TRIG | 1 << SYS_CLOCK);
+	
 	gpio_set_dir_out_masked(1 << DRV_ACK);
 	gpio_clr_mask(1 << DRV_ACK);
 
@@ -128,15 +162,33 @@ void setup()
 	
 	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
 	
-	//TODO: These would be PIO signals
-	//gpio_set_dir_in_masked(1 << READ_TRIG | 1 << WRITE_TRIG);
+	// Setup PIO state machines
+	uint offset = pio_add_program(pio0, &read_data_program);
+	read_data_program_init(pio0, 0, offset);
 	
-	// Setup differential signals
-	// TODO: These would be set up as PIO signals
-	//gpio_set_dir_in_masked(1 << RW_IN);
-	//gpio_set_dir_out_masked(1 << RW_OUT);
-	//gpio_clr_mask(1 << RW_OUT);
-	//gpio_set_dir_in_masked(1 << CLK);
+	offset = pio_add_program(pio1, &write_data_program);
+	write_data_program_init(pio1, 0, offset);
+	
+	offset = pio_add_program(pio0, &read_trig_program);
+	read_trig_program_init(pio0, 1, offset);
+	
+	pio_set_irq0_source_enabled(pio0, pis_interrupt0, true);
+	irq_add_shared_handler(PIO0_IRQ_0, readTrigISR, 0);
+	irq_set_enabled(PIO0_IRQ_0, true);
+	
+	offset = pio_add_program(pio0, &cmd_strobe_trig_program);
+	read_trig_program_init(pio0, 2, offset);
+	
+	pio_set_irq1_source_enabled(pio0, pis_interrupt1, true);
+	irq_add_shared_handler(PIO0_IRQ_1, cmdStrobeTriggerISR, 0);
+	irq_set_enabled(PIO0_IRQ_1, true);
+	
+	offset = pio_add_program(pio1, &write_trig_program);
+	write_trig_program_init(pio1, 1, offset);
+	
+	pio_set_irq0_source_enabled(pio1, pis_interrupt0, true);
+	irq_add_shared_handler(PIO1_IRQ_0, writeTrigISR, 0);
+	irq_set_enabled(PIO1_IRQ_0, true);
 	
 #ifdef DEBUG
 	Serial.printf("Disk is spun up.  Starting Command Processor...\r\n");
@@ -405,6 +457,8 @@ void setIncomingHeadAddress(int data)
 	incomingHeadAddress = ((readDataBus(data) >> 2) & 0x03);
 }
 
+bool doneShortRead = false;
+
 void loop()
 {
 
@@ -412,6 +466,8 @@ void loop()
 #ifdef DEBUG
 	Serial.println("CMD_STROBE went HIGH");
 #endif
+	
+	cmdStrobeTrigger = true;
 	
 	int data = gpio_get_all();
 	
@@ -467,33 +523,48 @@ void loop()
 	case 2:  // CMD BYTE 2
 		if (isSelected)
 		{
-			//			
-			//			while (!readGate) ;
-			//			
-			//			// Short Read
-			//			int sectorNum = currentSector;
-			//			for (int i = 0; i < 25; ++i)
-			//			{
-			//				// put_byte_block(currentTrackData[sectorNum * 540])
-			//			}
-			//			
-			//			while (!readGate && !writeGate && cmdStrobe) ;
-			//			
-			//			if (readGate)
-			//			{
-			//				for (int i = 0; i < 540; ++i)
-			//				{
-			//					//put_byte_block(currentTrackData[sectorNum * 540])
-			//				}
-			//			}
-			//			else if (writeGate)
-			//			{
-			//				int sectorNum = currentSector;
-			//				for (int i = 0; i < 540; ++i)
-			//				{
-			//					//currentTrackData[sectorNum * 540] = get_byte_block;
-			//				}				
-			//			}
+#ifdef DEBUG
+			Serial.println("Setting DRV_ACK HIGH");
+#endif
+			gpio_set_mask(1 << DRV_ACK);
+			
+			while (cmdStrobeTrigger)
+			{
+				if (readTrigger)
+				{
+					if (doneShortRead)
+					{
+						int sectorNum = currentSector;
+						for (int i = 0; i < 540; ++i)
+						{
+							read_data_putc(pio0, 0, currentTrackData[(sectorNum * 540) + i]);
+						}
+						readTrigger = false;
+						doneShortRead = false;
+					}
+					else
+					{
+						int sectorNum = currentSector;
+						for (int i = 0; i < 25; ++i)
+						{
+							read_data_putc(pio0, 0, currentTrackData[(sectorNum * 540) + i]);
+						}
+						readTrigger = false;
+						doneShortRead = true;						
+					}
+				}
+				else if (writeTrigger)
+				{
+					int sectorNum = currentSector;
+					for (int i = 0; i < 540; ++i)
+					{
+						currentTrackData[sectorNum * 540] = write_data_getc(pio1, 0);
+					}	
+					writeTrigger = false;
+					doneShortRead = false;
+				}
+			}
+			
 		}
 		break;
 	case 6:  // CMD BYTE 3
@@ -576,6 +647,8 @@ void loop()
 #ifdef DEBUG
 	Serial.println("CMD_STROBE went LOW");
 #endif
+	
+	cmdStrobeTrigger = false;
 	
 #ifdef DEBUG
 	Serial.println("Setting bus pins back to INPUT");

@@ -1,0 +1,43 @@
+.program write_data
+
+.wrap_target
+	wait 1 gpio 1		// Wait for WRITE_TRIG to go HIGH
+	wait 1 gpio 14		// Wait for negative edge of clock
+	wait 0 gpio 14		// Wait for postive edge of clock
+	in pins, 1			// Input data
+.wrap
+
+	% c-sdk {
+
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void write_data_program_init(PIO pio, uint sm, uint offset) 
+{    
+    pio_sm_config c = write_data_program_get_default_config(offset);
+
+    sm_config_set_in_pins(&c, 20);
+
+    pio_sm_set_pindirs_with_mask(pio, sm, ~(1u << 20), 1u << 20);
+
+    pio_gpio_init(pio, 20);
+
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+    sm_config_set_in_shift(&c, true, true, 8);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline char write_data_getc(PIO pio, uint sm) {
+
+    return pio_sm_get_blocking(pio, sm);
+}
+
+static inline bool write_data_has_data(PIO pio, uint sm)
+{
+    return !pio_sm_is_rx_fifo_empty(pio, sm);
+}
+
+%}

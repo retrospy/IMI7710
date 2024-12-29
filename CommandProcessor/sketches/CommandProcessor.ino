@@ -25,16 +25,16 @@
 #define ADDR2 19
 #define ADDR3 20
 
-// Internal Control Bins
+// Internal Control Pins
 #define OUTPUT_ENABLE 14
 
 #define BUS_DIRECTION 15
 #define READ LOW
 #define WRITE HIGH
 
-#define READ_TRIG	0
-#define WRITE_TRIG	1
 #define DRV_ACK		21
+#define ENABLE_READ_TRIG	0
+#define ENABLE_WRITE_TRIG	1
 
 #define FAULT	22
 
@@ -43,6 +43,10 @@
 
 // Built-in LED
 #define LED 25
+
+// LEDs
+#define BUSY_LED 26
+#define READY_LED 27
 
 bool isSelected = false;
 
@@ -73,9 +77,13 @@ void setup()
 	Serial.print("Waiting for disk to \"spin up\"...");
 #endif
 	
-	// Setup board handshake line
-	gpio_init_mask(1 << DRV_ACK);
+	// Setup internal control signals
+	gpio_init_mask(1 << DRV_ACK | 1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
+	
 	gpio_set_dir_in_masked(1 << DRV_ACK);
+	
+	gpio_set_dir_out_masked(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
+	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
 	
 	// Wait for disk to "spin up"
 	while (!gpio_get(DRV_ACK)) ;
@@ -109,9 +117,12 @@ void setup()
 	gpio_set_dir_out_masked(0x0F << ADDR0);
 
 	// Mark setup finished, by lighting LED
-	gpio_init_mask(1 << LED);
-	gpio_set_dir_out_masked(1 << LED);
+	gpio_init_mask(1 << LED | 1 << BUSY_LED | 1 << READY_LED );
+	gpio_set_dir_out_masked(1 << LED | 1 << BUSY_LED | 1 << READY_LED);
 	gpio_set_mask(1 << LED);
+	gpio_clr_mask(1 << BUSY_LED);
+	gpio_put(READY_LED, !gpio_get(FAULT));
+
 	
 #ifdef DEBUG
 	Serial.printf("Drive is fully initialized.  Starting Command Processor...\r\n");
@@ -125,6 +136,8 @@ void loop()
 #ifdef DEBUG
 	Serial.println("CMD_STROBE went HIGH");
 #endif
+	
+	gpio_set_mask(1 << BUSY_LED);
 	
 	int data = gpio_get_all();
 	
@@ -149,10 +162,7 @@ void loop()
 #ifdef DEBUG
 			Serial.printf("Activating drive with address %d.\r\n", ID);
 #endif
-			for (int i = 0; i <= (ADDR3 - ADDR0); ++i)
-			{
-				gpio_put(ADDR0 + i, (ID & (1 << i)) == 0 ? LOW : HIGH);	
-			}
+			gpio_put_masked(0x0F << ADDR0, (unitSelect & 0x0F) << ADDR0);	
 #ifdef DEBUG
 			Serial.println("Setting OUTPUT_ENABLE HIGH");
 #endif
@@ -175,10 +185,7 @@ void loop()
 	case 2:  // CMD BYTE 2
 		if (isSelected)
 		{
-#ifdef DEBUG
-			Serial.println("Setting WRITE_TRIG and READ_TRIG HIGH");
-#endif
-			gpio_set_mask((1 << WRITE_TRIG) | (1 << READ_TRIG));			
+			gpio_set_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
 		}
 		break;
 	case 6: // CMD BYTE 3
@@ -214,12 +221,11 @@ void loop()
 	gpio_clr_mask(1 << BUS_DIRECTION);
 	
 #ifdef DEBUG
-	Serial.println("Setting WRITE_TRIG and READ_TRIG LOW");
-#endif
-	gpio_clr_mask((1 << WRITE_TRIG) | (1 << READ_TRIG));
-	
-#ifdef DEBUG
 	Serial.println("Setting CMD_ACK LOW");
 #endif
 	gpio_clr_mask(CMD_ACK);
+	
+	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
+	
+	gpio_clr_mask(1 << BUSY_LED);
 }

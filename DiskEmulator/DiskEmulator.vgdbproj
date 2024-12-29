@@ -18,7 +18,18 @@
           <string>DiskEmulator.ino</string>
         </Files>
       </RootSketchFolder>
-      <OtherFiles />
+      <OtherFiles>
+        <string>sketches\read_data.pio</string>
+        <string>sketches\read_trig.pio</string>
+        <string>sketches\write_data.pio</string>
+        <string>sketches\write_trig.pio</string>
+        <string>sketches\read_data.h</string>
+        <string>sketches\read_trig.h</string>
+        <string>sketches\write_data.h</string>
+        <string>sketches\write_trig.h</string>
+        <string>sketches\cmd_strobe_trig.pio</string>
+        <string>sketches\cmd_strobe_trig.h</string>
+      </OtherFiles>
     </ProjectModeSettings>
   </Project>
   <Build xsi:type="com.visualgdb.build.external.arduino">

@@ -1,0 +1,22 @@
+.program read_trig
+
+.wrap_target
+	wait 1 gpio 0		// Wait for READ_TRIG to go HIGH
+	irq wait 0			// Raise interrupt and wait for acknowledgement
+	wait 0 gpio 0		// Wait for READ_TRIG to go LOW
+.wrap
+
+	% c-sdk {
+
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void read_trig_program_init(PIO pio, uint sm, uint offset) 
+{    
+    pio_sm_config c = read_trig_program_get_default_config(offset);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+%}

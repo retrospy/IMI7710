@@ -1,0 +1,38 @@
+.program read_data
+
+.wrap_target
+	wait 1 gpio 0		// Wait for READ_TRIG to go HIGH
+	wait 0 gpio 14		// Wait for negative edge of clock
+	wait 1 gpio 14		// Wait for postive edge of clock
+	out pins, 1			// Output data
+.wrap
+
+	% c-sdk {
+
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void read_data_program_init(PIO pio, uint sm, uint offset) 
+{    
+    pio_sm_config c = read_data_program_get_default_config(offset);
+
+    sm_config_set_out_pins(&c, 13, 1);
+
+    pio_sm_set_pindirs_with_mask(pio, sm, 1u << 13, 1u << 13);
+    pio_sm_set_pins_with_mask(pio, sm, ~(1u << 13), 1u << 13); 
+
+    pio_gpio_init(pio, 13);
+
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    sm_config_set_out_shift(&c, true, true, 8);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void read_data_putc(PIO pio, uint sm, char c) {
+    pio_sm_put_blocking(pio, sm, c);
+}
+
+%}
