@@ -269,6 +269,7 @@ void setup1()
 						rwFailure = true;
 						statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
 						gpio_set_mask(1 << FAULT);
+						f.close();
 						break;
 					}
 					
@@ -300,16 +301,17 @@ void setup1()
 								gpio_set_mask(1 << FAULT);
 								break;
 							}
-							else
-							{
-#ifdef DEBUG
-								Serial.println("Added initial sync bits.");
-#endif
-								f.close();
-							}
 						}
 
 					}
+					
+					if (!rwFailure)
+					{
+#ifdef DEBUG
+						Serial.println("Added initial sync bits.");
+#endif
+					}
+					f.close();
 				}
 			}
 		}
@@ -318,11 +320,33 @@ void setup1()
 #ifdef DEBUG
 			Serial.println("hd0.img found.");
 #endif
+			File f = SD.open("hd0.img", FILE_WRITE);
+			if (!f)
+			{
+				rwFailure = true;
+				statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+				gpio_set_mask(1 << FAULT);
+			}
+			else
+			{
+				if (!f.seek(12312000 - 1)) 
+				{
+#ifdef DEBUG
+					Serial.println("hd0.img is the wrong size.  Most likely it is corrupt.");
+#endif
+					rwFailure = true;
+					statusRegister2 |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+					gpio_set_mask(1 << FAULT);
+				}
+
+				f.close();
+			}
+			
+
 		}
 		
 		if (!rwFailure)
-		{
-			
+		{	
 			cylinderAddressRegister = 0;
 			headAddressRegister = 0;
 			loadTrack();
@@ -566,9 +590,11 @@ void loop()
 
 void loop1()
 {	
-	if (flushTrack)
+	bool success;
+	
+	if (flushTrack && (statusRegister2 & REG2_RW_UNSAFE) == 0)
 	{
-		saveTrack();
+		success = saveTrack();
 		flushTrack = false;
 	}
 	
@@ -579,7 +605,8 @@ void loop1()
 			headAddressRegister = incomingHeadAddress;
 			cylinderAddressRegister = incomingCylinderAddress;
 	
-			if (loadTrack())
+			success = loadTrack();
+			if (success)
 			{
 				statusRegister1 |= REG1_ON_CYLINDER;
 			}
@@ -589,10 +616,13 @@ void loop1()
 			statusRegister1 |= REG1_ON_CYLINDER;
 		}
 		
-		statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
+		if (success)
+		{	
+			statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
 		
-		gpio_set_mask(1 << SEEK_COMPLETE);
-		delayMicroseconds(3);
-		gpio_clr_mask(1 << SEEK_COMPLETE);                                                                                                                                                                                           
+			gpio_set_mask(1 << SEEK_COMPLETE);
+			delayMicroseconds(4);
+			gpio_clr_mask(1 << SEEK_COMPLETE);                                                                                                                                                                                           
+		}
 	}
 }
