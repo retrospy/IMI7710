@@ -12,9 +12,10 @@
 #define DEBUG
 
 // Command Bus
-#define CMD_RW		2
+#define CMD_SEL0	2
 #define CMD_SEL1	3
-#define CMD_SEL0	4
+#define CMD_RW		4
+
 
 #define BUS_0		5
 #define BUS_1		6
@@ -51,6 +52,7 @@
 
 // HD Device ID
 #define ID 0
+
 
 // Sector/Index Pulse Variables
 RPI_PICO_Timer ITimer(0);
@@ -191,7 +193,7 @@ void setup()
 	irq_set_enabled(PIO1_IRQ_0, true);
 	
 #ifdef DEBUG
-	Serial.printf("Disk is spun up.  Starting Command Processor...\r\n");
+	Serial.printf("Disk is spun up.  Initializing Command Processor...\r\n");
 #endif
 	
 	gpio_set_mask(1 << DRV_ACK);
@@ -241,7 +243,8 @@ bool saveTrack()
 	File f = SD.open("hd0.img", FILE_WRITE);
 	if (!f)
 	{
-		statusRegister2 |= REG1_RW_FAULT;
+		statusRegister1 |= REG1_RW_FAULT;
+		statusRegister2 |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;
 	}
@@ -249,7 +252,8 @@ bool saveTrack()
 	if (!f.seek((cylinderAddressRegister * 32400) + (headAddressRegister * 10800)))
 	{
 		f.close();
-		statusRegister2 |= REG1_RW_FAULT;
+		statusRegister1 |= REG1_RW_FAULT;
+		statusRegister2 |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;
 	}
@@ -257,7 +261,8 @@ bool saveTrack()
 	if (!f.write((const uint8_t*)currentTrackData, 10800))
 	{
 		f.close();
-		statusRegister2 |= REG1_RW_FAULT;
+		statusRegister1 |= REG1_RW_FAULT;
+		statusRegister2 |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;		
 	}
@@ -266,22 +271,9 @@ bool saveTrack()
 	return true;
 }
 
-void setup1()
+bool ConfigureSDCard()
 {
 	bool rwFailure = false;
-	while (!setupHandshake) ;
-	
-	// Setup Drive Signals
-	gpio_init_mask(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
-	gpio_set_dir_out_masked(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
-	gpio_clr_mask(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
-	
-#ifdef DEBUG
-	Serial.println("Start Index and Sector Pulse");
-#endif
-	
-	// Start Index and Sector Pulse
-	ITimer.attachInterruptInterval(833.5, SectorIndexPulseISR);
 	
 	for (int i = 0; i < 10800; ++i)
 		currentTrackData[i] = 0;
@@ -392,69 +384,88 @@ void setup1()
 				}
 
 				f.close();
-			}
-			
+			}	
 
-		}
-		
-		if (!rwFailure)
-		{	
-			cylinderAddressRegister = 0;
-			headAddressRegister = 0;
-			loadTrack();
-	
-			statusRegister1 |= REG1_ON_CYLINDER;
-			statusRegister1 &= ~REG1_REZEROING & ~REG1_SEEKING;
 		}
 	}
+	
+	return !rwFailure;
+}
 
+void setup1()
+{
+
+	while (!setupHandshake) ;
+	
+	// Setup Drive Signals
+	gpio_init_mask(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
+	gpio_set_dir_out_masked(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
+	gpio_clr_mask(1 << SECTOR | 1 << SEEK_COMPLETE | 1 << INDEX | 1 << FAULT);
+	
+#ifdef DEBUG
+	Serial.println("Start Index and Sector Pulse");
+#endif
+	
+	// Start Index and Sector Pulse
+	ITimer.attachInterruptInterval(833.5, SectorIndexPulseISR);
+	
+	// Setup SD card access
+	if (ConfigureSDCard())
+	{	
+		cylinderAddressRegister = 0;
+		headAddressRegister = 0;
+		loadTrack();
+	
+		statusRegister1 |= REG1_ON_CYLINDER;
+		statusRegister1 &= ~REG1_REZEROING & ~REG1_SEEKING;
+	}
 	
 	setupHandshake = false;
 }
 
 void setDataBusToOutput()
 {
-	gpio_set_dir_out_masked(0x1FE0);
+	gpio_set_dir_out_masked(0xFF << BUS_0);
 }
 
 void setDataBusToInput()
 {
-	gpio_set_dir_in_masked(0x1FE0);
+	gpio_set_dir_in_masked(0xFF << BUS_0);
 }
 
 void writeDataBus(byte data)
 {
-	gpio_put_masked(0x1FE0, (int)data << 5);
+	gpio_put_masked(0xFF << BUS_0, ~((int)data << BUS_0));
 }
 
-byte readDataBus(int data)
+byte readDataBus(int pins)
 {
-	return ((data & 0x1FE0) >> 5);
+	return ~(pins >> BUS_0);
 }
 
-byte readCommand(int data)
+byte getCommand(int pins)
 {
-	return ((data & 0x1C) >> 2);
+	return (pins >> CMD_SEL0) & 0x03;
 }
 
-byte extractUnitId(int data)
+byte getUnitID(int pins)
 {
-	return (readDataBus(data) >> 4);
+	return (readDataBus(pins) & 0xF0) >> 0x04;
 }
 
-void setIncomingCylinderAddressHigh(int data)
+void setIncomingCylinderAddressHigh(int pins)
 {
-	incomingCylinderAddress = (incomingCylinderAddress & ~0x300) | (readDataBus(data) << 8);
+	incomingCylinderAddress = (incomingCylinderAddress & ~(0x03 << 0x08)) | (readDataBus(pins) << 8) ;
 }
 
-void setIncomingCylinderAddressLow(int data)
+void setIncomingCylinderAddressLow(int pins)
 {
-	incomingCylinderAddress = (incomingCylinderAddress & ~0xFF) | readDataBus(data);
+	incomingCylinderAddress = (incomingCylinderAddress & ~0xFF) | readDataBus(pins);
 }
 
-void setIncomingHeadAddress(int data)
+void setIncomingHeadAddress(int pins)
 {
-	incomingHeadAddress = ((readDataBus(data) >> 2) & 0x03);
+	incomingHeadAddress = ((readDataBus(pins) >> 2) & 0x03);
 }
 
 bool doneShortRead = false;
@@ -463,23 +474,18 @@ void loop()
 {
 
 	while (!gpio_get(CMD_STROBE)) ;
-#ifdef DEBUG
-	Serial.println("CMD_STROBE went HIGH");
-#endif
 	
 	cmdStrobeTrigger = true;
 	
-	int data = gpio_get_all();
+	int pins = gpio_get_all();
 	
-	byte command = readCommand(data);
+	byte command = getCommand(pins);
 	
 #ifdef DEBUG
-	Serial.print("Received command byte: ");
+	Serial.print("Received command ");
 	Serial.print(command);
-	Serial.print(" for ");
-	Serial.print(extractUnitId(data));
-	Serial.print(" with ");
-	Serial.println(readDataBus(data), BIN);
+	Serial.print(" with data: ");
+	Serial.println(readDataBus(pins), HEX);
 #endif
 	
 	switch (command)
@@ -487,28 +493,29 @@ void loop()
 		byte unitSelect;
 		
 	case 0:
-		isSelected = extractUnitId(data) == ID;
-		
+		isSelected = getUnitID(pins) == ID;
+	
 		if (isSelected)
 		{
-			setIncomingHeadAddress(data);
-			setIncomingCylinderAddressHigh(data);
 #ifdef DEBUG
-			Serial.println("Setting Head and High bits of CylinderRegister");
+			Serial.printf("Activating drive with address %d.\r\n", ID);
 #endif
+			setIncomingHeadAddress(pins);
+			setIncomingCylinderAddressHigh(pins);
 		}
 		else
 		{
+#ifdef DEBUG
+			Serial.println("Deactivating drive.");
+#endif
 			isSelected = false;
 		}
 		break;
-	case 4:  // CMD BYTE 1
+	case 1: 
 		if (isSelected)
 		{
-			setIncomingCylinderAddressLow(data);
-#ifdef DEBUG
-			Serial.println("Setting Low bits of CylinderRegister");
-#endif
+			setIncomingCylinderAddressLow(pins);
+
 			if (incomingCylinderAddress > 353)
 			{
 				statusRegister1 |= REG1_ILLEGAL_ADDRESS;
@@ -523,9 +530,6 @@ void loop()
 	case 2:  // CMD BYTE 2
 		if (isSelected)
 		{
-#ifdef DEBUG
-			Serial.println("Setting DRV_ACK HIGH");
-#endif
 			gpio_set_mask(1 << DRV_ACK);
 			
 			while (cmdStrobeTrigger)
@@ -567,36 +571,44 @@ void loop()
 			
 		}
 		break;
-	case 6:  // CMD BYTE 3
+	case 3:  // CMD BYTE 3
 		if (isSelected)
 		{
-			if ((data & 0x02) != 0)  // REZERO
+			if ((pins & 0x02) != 0)  // REZERO
 			{
 #ifdef DEBUG
 				Serial.println("Rezero-ing Drive");
 #endif
-				incomingCylinderAddress = 0;
-				incomingHeadAddress = 0;
-				gpio_clr_mask(1 << FAULT);
-				statusRegister1 &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER & ~REG1_RW_FAULT;
-				statusRegister1 |= REG1_SEEKING | REG1_REZEROING;
+				if (ConfigureSDCard())
+				{
+					incomingCylinderAddress = 0;
+					incomingHeadAddress = 0;
+				
+					statusRegister1 &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER & ~REG1_RW_FAULT;
+					statusRegister2 &= ~REG2_RW_UNSAFE;
+					statusRegister1 |= REG1_SEEKING | REG1_REZEROING;
+					gpio_clr_mask(1 << FAULT);
+				}
 			}
-			else if ((data & 0x01) != 0) // FAULT CLEAR
+			else if ((pins & 0x01) != 0) // FAULT CLEAR
 			{
 #ifdef DEBUG
 				Serial.println("Clearing Fault");
 #endif
-				statusRegister1 &= ~REG1_RW_FAULT;
-				statusRegister2 &= ~REG2_RW_UNSAFE;
-				gpio_clr_mask(1 << FAULT);
+				if (ConfigureSDCard())
+				{
+					statusRegister1 &= ~REG1_RW_FAULT;
+					statusRegister2 &= ~REG2_RW_UNSAFE;
+					gpio_clr_mask(1 << FAULT);
+				}
 			}
 		}
 		break;
-	case 1:  // CMD BYTE 4
+	case 4:  // CMD BYTE 4
 		if (isSelected)
 		{
 #ifdef DEBUG
-			Serial.println("Outputting Register1");
+			Serial.println("Outputting Register 1");
 #endif
 			setDataBusToOutput();
 			writeDataBus(statusRegister1);
@@ -606,17 +618,17 @@ void loop()
 		if (isSelected)
 		{
 #ifdef DEBUG
-			Serial.println("Outputting Register2");
+			Serial.println("Outputting Register 2");
 #endif
 			setDataBusToOutput();
 			writeDataBus(statusRegister2);
 		}
 		break;
-	case 3:  // CMD BYTE 6
+	case 6:  // CMD BYTE 6
 		if (isSelected)
 		{
 #ifdef DEBUG
-			Serial.println("Outputting low bits of CylinderAddress Register");
+			Serial.println("Outputting Current CMD BYTE 2 Settings");
 #endif
 			setDataBusToOutput();
 			writeDataBus(cylinderAddressRegister & 0xFF);
@@ -626,7 +638,7 @@ void loop()
 		if (isSelected)
 		{
 # ifdef DEBUG
-			Serial.println("Outputting ID, HeadAddress Register and high bits of CylinderAddress Register");
+			Serial.println("Outputting Current CMD BYTE 2 Settings");
 #endif
 			setDataBusToOutput();
 			byte returnValue = ((ID & 0x0F) << 4) | ((headAddressRegister & 0x03)) << 2 | ((cylinderAddressRegister & 0x300) >> 8);
@@ -635,29 +647,14 @@ void loop()
 		break;
 	}
 	
-	if (command != 2)
-	{
-#ifdef DEBUG
-		Serial.println("Setting DRV_ACK HIGH");
-#endif
-		gpio_set_mask(1 << DRV_ACK);	
-	}
+	gpio_set_mask(1 << DRV_ACK);	
 
 	while (gpio_get(CMD_STROBE)) ;
-#ifdef DEBUG
-	Serial.println("CMD_STROBE went LOW");
-#endif
 	
 	cmdStrobeTrigger = false;
 	
-#ifdef DEBUG
-	Serial.println("Setting bus pins back to INPUT");
-#endif
 	setDataBusToInput();
 	
-#ifdef DEBUG
-	Serial.println("Setting DRV_ACK LOW");
-#endif
 	gpio_clr_mask(1 << DRV_ACK);
 }
 
@@ -667,8 +664,8 @@ void loop1()
 	
 	if (flushTrack && (statusRegister2 & REG2_RW_UNSAFE) == 0)
 	{
-		success = saveTrack();
-		flushTrack = false;
+		if (saveTrack())
+			flushTrack = false;
 	}
 	
 	if ((statusRegister1 & REG1_SEEKING) != 0)
@@ -689,13 +686,10 @@ void loop1()
 			statusRegister1 |= REG1_ON_CYLINDER;
 		}
 		
-		if (success)
-		{	
-			statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
+		statusRegister1 &= ~REG1_SEEKING & ~REG1_REZEROING;
 		
-			gpio_set_mask(1 << SEEK_COMPLETE);
-			delayMicroseconds(4);
-			gpio_clr_mask(1 << SEEK_COMPLETE);                                                                                                                                                                                           
-		}
+		gpio_set_mask(1 << SEEK_COMPLETE);
+		delayMicroseconds(4);
+		gpio_clr_mask(1 << SEEK_COMPLETE);                                                                                                                                                                                           
 	}
 }

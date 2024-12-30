@@ -2,9 +2,10 @@
 #define DEBUG
 
 // Command Bus
-#define CMD_RW		2
+#define CMD_SEL0	2
 #define CMD_SEL1	3
-#define CMD_SEL0	4
+#define CMD_RW		4
+
 
 #define BUS_0		5
 #define BUS_1		6
@@ -50,19 +51,29 @@
 
 bool isSelected = false;
 
-byte readDataBus(int data)
+byte readDataBus(int pins)
 {
-	return ((data & 0x1FE0) >> 5);
+	return ~(pins >> BUS_0);
 }
 
-byte extractUnitId(int data)
+byte getCommand(int pins)
 {
-	return (readDataBus(data) >> 4);
+	return (pins >> CMD_SEL0) & 0x03;
 }
 
-byte readCommand(int data)
+byte getUnitID(int pins)
 {
-	return ((data & 0x1C) >> 2);
+	return (readDataBus(pins) & 0xF0) >> 0x04;
+}
+
+void setDataBusToRead()
+{
+	gpio_set_mask(1 << BUS_DIRECTION);
+}
+
+void setDataBusToWrite()
+{
+	gpio_clr_mask(1 << BUS_DIRECTION);
 }
 
 void setup()
@@ -103,7 +114,7 @@ void setup()
 	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0);
 
 	gpio_set_dir_out_masked(1 << BUS_DIRECTION);
-	gpio_clr_mask(1 << BUS_DIRECTION);
+	gpio_set_mask(1 << BUS_DIRECTION);
 	
 	gpio_set_dir_in_masked(0xFF << BUS_0);
 	
@@ -133,97 +144,69 @@ void loop()
 {
 	while (!digitalRead(CMD_STROBE)) ;
 	
-#ifdef DEBUG
-	Serial.println("CMD_STROBE went HIGH");
-#endif
-	
 	gpio_set_mask(1 << BUSY_LED);
 	
-	int data = gpio_get_all();
+	int pins = gpio_get_all();
 	
-	byte command = readCommand(data);
+	byte command = getCommand(pins);
 
 #ifdef DEBUG
-	Serial.print("Received command byte: ");
+	Serial.print("Received command ");
 	Serial.print(command);
-	Serial.print(" for ");
-	Serial.println(extractUnitId(data));
+	Serial.print(" with data: ");
+	Serial.println(readDataBus(pins), HEX);
 #endif
 
 	switch (command)
 	{
-		byte unitSelect;
+		byte selectedUnit;
 		
-	case 0: // CMD 0
-		unitSelect = extractUnitId(data);
-		isSelected = unitSelect == ID;
+	case 0:
+		selectedUnit = getUnitID(pins);
+		isSelected = selectedUnit == ID;
 		if (isSelected)
 		{
 #ifdef DEBUG
 			Serial.printf("Activating drive with address %d.\r\n", ID);
 #endif
-			gpio_put_masked(0x0F << ADDR0, (unitSelect & 0x0F) << ADDR0);	
-#ifdef DEBUG
-			Serial.println("Setting OUTPUT_ENABLE HIGH");
-#endif
+			gpio_put_masked(0x0F << ADDR0, selectedUnit << ADDR0);	
+
 			gpio_set_mask(1 << OUTPUT_ENABLE);
 		}
 		else
 		{
 #ifdef DEBUG
-			Serial.printf("Deactivating drive.\r\n", ID);
+			Serial.println("Deactivating drive.");
 #endif
-#ifdef DEBUG
-			Serial.println("Setting OUTPUT_ENABLE LOW");
-#endif
-			gpio_set_mask(1 << OUTPUT_ENABLE);
+			gpio_clr_mask(1 << OUTPUT_ENABLE);
 		}
 		break;
-	case 4:  // CMD BYTE 1
+	case 1:
 		// Do Nothing
 		break;
-	case 2:  // CMD BYTE 2
+	case 2:
 		if (isSelected)
 		{
 			gpio_set_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
 		}
 		break;
-	case 6: // CMD BYTE 3
+	case 3:
 		// Do Nothing
 		break;
-	default:
-#ifdef DEBUG
-		Serial.println("Setting BUS_DIRECTION to WRITE");
-#endif
-		gpio_set_mask(1 << BUS_DIRECTION);
+	default:  // CMD Bytes 4-7
+		setDataBusToWrite();
 		break;
 	}
 	
 	while (!digitalRead(DRV_ACK)) ;
-#ifdef DEBUG
-	Serial.println("DRV_ACK went HIGH");
-#endif
 	
-#ifdef DEBUG
-	Serial.println("Setting CMD_ACK HIGH");
-#endif
 	gpio_set_mask(1 << CMD_ACK);
 	
-	
 	while(digitalRead(CMD_STROBE));
-#ifdef DEBUG
-	Serial.println("CMD_STROBE went LOW");
-#endif
 	
-#ifdef DEBUG
-	Serial.println("Setting BUS_DIRECTION to READ");
-#endif
-	gpio_clr_mask(1 << BUS_DIRECTION);
+	setDataBusToRead();
 	
-#ifdef DEBUG
-	Serial.println("Setting CMD_ACK LOW");
-#endif
-	gpio_clr_mask(CMD_ACK);
+	gpio_clr_mask(1 << CMD_ACK);
 	
 	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
 	

@@ -1,9 +1,9 @@
 .program cmd_strobe_trig
 
 .wrap_target
-	wait 0 gpio 28		// Wait for READ_TRIG to go HIGH
+	wait 0 gpio 28		// Wait for CMD_STROBE to go LOW
 	irq wait 1			// Raise interrupt and wait for acknowledgement
-	wait 1 gpio 28		// Wait for READ_TRIG to go LOW
+	wait 1 gpio 28		// Wait for CMD_STROBE to go LOW
 .wrap
 
 	% c-sdk {
