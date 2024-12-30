@@ -18,8 +18,8 @@
 static const uint16_t write_data_program_instructions[] = {
             //     .wrap_target
     0x2081, //  0: wait   1 gpio, 1                  
-    0x208e, //  1: wait   1 gpio, 14                 
-    0x200e, //  2: wait   0 gpio, 14                 
+    0x200e, //  1: wait   0 gpio, 14                 
+    0x208e, //  2: wait   1 gpio, 14                 
     0x4001, //  3: in     pins, 1                    
             //     .wrap
 };
@@ -50,7 +50,8 @@ static inline void write_data_program_init(PIO pio, uint sm, uint offset)
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
-static inline char write_data_getc(PIO pio, uint sm) {
+static inline char write_data_getc(PIO pio, uint sm) 
+{
     return pio_sm_get_blocking(pio, sm);
 }
 static inline bool write_data_has_data(PIO pio, uint sm)

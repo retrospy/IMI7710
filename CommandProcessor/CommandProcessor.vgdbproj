@@ -26,7 +26,11 @@
     <IgnoreNormalLibraryDirectories>false</IgnoreNormalLibraryDirectories>
     <OutputSubdirectory>Output\$(PlatformName.defuse)\$(ConfigurationName.defuse)</OutputSubdirectory>
     <EnableVerboseBuild>false</EnableVerboseBuild>
-    <PreprocessorMacros />
+    <PreprocessorMacros>
+      <Common>
+        <string>PICO_COPY_TO_RAM</string>
+      </Common>
+    </PreprocessorMacros>
     <ExtraLinkerFlags>
       <string>-Wl,-q</string>
     </ExtraLinkerFlags>

@@ -27,8 +27,6 @@
         <string>sketches\read_trig.h</string>
         <string>sketches\write_data.h</string>
         <string>sketches\write_trig.h</string>
-        <string>sketches\cmd_strobe_trig.pio</string>
-        <string>sketches\cmd_strobe_trig.h</string>
       </OtherFiles>
     </ProjectModeSettings>
   </Project>
@@ -36,8 +34,12 @@
     <BuildLogMode xsi:nil="true" />
     <IgnoreNormalLibraryDirectories>false</IgnoreNormalLibraryDirectories>
     <OutputSubdirectory>Output\$(PlatformName.defuse)\$(ConfigurationName.defuse)</OutputSubdirectory>
-    <EnableVerboseBuild>false</EnableVerboseBuild>
-    <PreprocessorMacros />
+    <EnableVerboseBuild>true</EnableVerboseBuild>
+    <PreprocessorMacros>
+      <Common>
+        <string>PICO_COPY_TO_RAM</string>
+      </Common>
+    </PreprocessorMacros>
     <ExtraLinkerFlags>
       <string>-Wl,-q</string>
     </ExtraLinkerFlags>
@@ -136,6 +138,17 @@
         <SoftwareTracingSettings>
           <TraceWhileDebugging>true</TraceWhileDebugging>
           <AutoStart>false</AutoStart>
+          <WorkArea xsi:type="AfterData">
+            <EndSymbolName>end</EndSymbolName>
+            <LastSectionName>.bss</LastSectionName>
+          </WorkArea>
+          <StaticTracePrograms xsi:type="AfterSection">
+            <SectionName>.text</SectionName>
+            <AddressLimit>18446744073709551615</AddressLimit>
+            <SectionGap>1048576</SectionGap>
+            <MaxSize>1048576</MaxSize>
+            <Alignment>64</Alignment>
+          </StaticTracePrograms>
           <DynamicProgramAreaSize>0</DynamicProgramAreaSize>
           <SkipInitiallyDisabledTracepoints>false</SkipInitiallyDisabledTracepoints>
           <TraceProgramOptimization>Size</TraceProgramOptimization>
@@ -144,15 +157,22 @@
           <InstrumentWithNoFeasibleTracepoints>false</InstrumentWithNoFeasibleTracepoints>
           <MaximumStringLength>255</MaximumStringLength>
           <DeferVectorTablePatching>true</DeferVectorTablePatching>
-          <ShowAdvancedConfiguration>false</ShowAdvancedConfiguration>
+          <ShowAdvancedConfiguration>true</ShowAdvancedConfiguration>
           <WorkAreaSize>4096</WorkAreaSize>
           <DisableLiveCodePatching>false</DisableLiveCodePatching>
         </SoftwareTracingSettings>
+        <RelatedExecutables>
+          <RelatedExecutable>
+            <Program>false</Program>
+            <LoadSymbols>false</LoadSymbols>
+            <ShowInLiveWatch>false</ShowInLiveWatch>
+          </RelatedExecutable>
+        </RelatedExecutables>
         <CheckInterfaceDrivers>true</CheckInterfaceDrivers>
       </DebugSettingsOverride>
       <BuildSettingsExtension xsi:type="com.visualgdb.build.external.arduino.extension">
         <BoardID>rp2040:rp2040:rpipico</BoardID>
-        <COMPort>COM6</COMPort>
+        <COMPort />
         <Properties>
           <Entries>
             <KeyValue>

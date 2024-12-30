@@ -13,20 +13,21 @@
 // --------- //
 
 #define read_trig_wrap_target 0
-#define read_trig_wrap 2
+#define read_trig_wrap 3
 
 static const uint16_t read_trig_program_instructions[] = {
             //     .wrap_target
     0x2080, //  0: wait   1 gpio, 0                  
     0xc020, //  1: irq    wait 0                     
     0x2000, //  2: wait   0 gpio, 0                  
+    0xc021, //  3: irq    wait 1                     
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program read_trig_program = {
     .instructions = read_trig_program_instructions,
-    .length = 3,
+    .length = 4,
     .origin = -1,
 };
 

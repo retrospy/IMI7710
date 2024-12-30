@@ -13,20 +13,21 @@
 // ---------- //
 
 #define write_trig_wrap_target 0
-#define write_trig_wrap 2
+#define write_trig_wrap 3
 
 static const uint16_t write_trig_program_instructions[] = {
             //     .wrap_target
     0x2081, //  0: wait   1 gpio, 1                  
     0xc020, //  1: irq    wait 0                     
     0x2001, //  2: wait   0 gpio, 1                  
+    0xc021, //  3: irq    wait 1                     
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program write_trig_program = {
     .instructions = write_trig_program_instructions,
-    .length = 3,
+    .length = 4,
     .origin = -1,
 };
 

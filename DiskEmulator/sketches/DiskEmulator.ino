@@ -6,7 +6,6 @@
 #include "read_data.h"
 #include "write_data.h"
 #include "read_trig.h"
-#include "cmd_strobe_trig.h"
 #include "write_trig.h"
 
 #define DEBUG
@@ -31,7 +30,6 @@
 // Internal Control Bins
 #define READ_TRIG	0
 #define WRITE_TRIG	1
-#define SYS_CLOCK 14
 #define DRV_ACK	15
 
 
@@ -44,15 +42,17 @@
 // Differential Signals
 #define RW_OUT 13
 #define RW_IN 20
-#define CLK 14
-
-#define LED 25
+#define SYS_CLOCK 14
 
 #define SDPIN 17
 
 // HD Device ID
 #define ID 0
 
+#define IS_PIN_HIGH(x) (gpio_get_all() & (1 << x)) != 0
+#define IS_PIN_LOW(x) (gpio_get_all() & (1 << x)) == 0
+#define SET_PIN_HIGH(x) gpio_set_mask(1 << x)
+#define SET_PIN_LOW(x) gpio_clr_mask(1 << x)
 
 // Sector/Index Pulse Variables
 RPI_PICO_Timer ITimer(0);
@@ -85,9 +85,10 @@ volatile byte statusRegister2 = 0;
 volatile byte currentTrackData[10800];
 volatile bool flushTrack = false;
 
-PIO rw_pio = pio0;
+#define  read_pio pio0
+#define  write_pio pio1
 
-bool SectorIndexPulseISR(__unused struct repeating_timer *t)
+bool __not_in_flash_func(SectorIndexPulseISR)(__unused struct repeating_timer *t)
 {
 	currentSector = (currentSector + 1) % 20;
 
@@ -109,26 +110,30 @@ volatile bool setupHandshake = false;
 
 volatile bool readTrigger = false;
 
-void readTrigISR()
+void __not_in_flash_func(readTrigRaiseISR)()
 {
 	readTrigger = true;
-	pio_interrupt_clear(pio0, 0);
+	pio_interrupt_clear(read_pio, 0);
 }
 
-volatile bool cmdStrobeTrigger = false;
-
-void cmdStrobeTriggerISR()
+void __not_in_flash_func(readTrigLowerISR)()
 {
-	cmdStrobeTrigger = true;
-	pio_interrupt_clear(pio0, 1);
+	readTrigger = false;
+	pio_interrupt_clear(read_pio, 1);
 }
 
 volatile bool writeTrigger = false;
 
-void writeTrigISR()
+void __not_in_flash_func(writeTrigRaiseISR)()
 {
 	writeTrigger = true;
-	pio_interrupt_clear(pio1, 0);
+	pio_interrupt_clear(write_pio, 0);
+}
+
+void __not_in_flash_func(writeTrigLowerISR)()
+{
+	writeTrigger = false;
+	pio_interrupt_clear(write_pio, 1);
 }
 
 void setup()
@@ -164,33 +169,35 @@ void setup()
 	
 	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
 	
-	// Setup PIO state machines
-	uint offset = pio_add_program(pio0, &read_data_program);
-	read_data_program_init(pio0, 0, offset);
+	// Setup PIO 0 state machines
+	uint offset = pio_add_program(read_pio, &read_data_program);
+	read_data_program_init(read_pio, 0, offset);
+
+	offset = pio_add_program(read_pio, &read_trig_program);
+	read_trig_program_init(read_pio, 1, offset);
 	
-	offset = pio_add_program(pio1, &write_data_program);
-	write_data_program_init(pio1, 0, offset);
-	
-	offset = pio_add_program(pio0, &read_trig_program);
-	read_trig_program_init(pio0, 1, offset);
-	
-	pio_set_irq0_source_enabled(pio0, pis_interrupt0, true);
-	irq_add_shared_handler(PIO0_IRQ_0, readTrigISR, 0);
+	pio_set_irq0_source_enabled(read_pio, pis_interrupt0, true);
+	irq_set_exclusive_handler(PIO0_IRQ_0, readTrigRaiseISR);
 	irq_set_enabled(PIO0_IRQ_0, true);
 	
-	offset = pio_add_program(pio0, &cmd_strobe_trig_program);
-	read_trig_program_init(pio0, 2, offset);
-	
-	pio_set_irq1_source_enabled(pio0, pis_interrupt1, true);
-	irq_add_shared_handler(PIO0_IRQ_1, cmdStrobeTriggerISR, 0);
+	pio_set_irq1_source_enabled(read_pio, pis_interrupt1, true);
+	irq_set_exclusive_handler(PIO0_IRQ_1, readTrigLowerISR);
 	irq_set_enabled(PIO0_IRQ_1, true);
+
+	// Setup PIO 1 state machines
+	offset = pio_add_program(write_pio, &write_data_program);
+	write_data_program_init(write_pio, 0, offset);
 	
-	offset = pio_add_program(pio1, &write_trig_program);
-	write_trig_program_init(pio1, 1, offset);
-	
-	pio_set_irq0_source_enabled(pio1, pis_interrupt0, true);
-	irq_add_shared_handler(PIO1_IRQ_0, writeTrigISR, 0);
+	offset = pio_add_program(write_pio, &write_trig_program);
+	write_trig_program_init(write_pio, 1, offset);
+
+	pio_set_irq0_source_enabled(write_pio, pis_interrupt0, true);
+	irq_set_exclusive_handler(PIO1_IRQ_0, writeTrigRaiseISR);
 	irq_set_enabled(PIO1_IRQ_0, true);
+	
+	pio_set_irq0_source_enabled(write_pio, pis_interrupt1, true);
+	irq_set_exclusive_handler(PIO1_IRQ_1, writeTrigLowerISR);
+	irq_set_enabled(PIO1_IRQ_1, true);
 	
 #ifdef DEBUG
 	Serial.printf("Disk is spun up.  Initializing Command Processor...\r\n");
@@ -200,12 +207,14 @@ void setup()
 	delay(500);
 	gpio_clr_mask(1 << DRV_ACK);
 	
+	while ((statusRegister1 & REG1_SEEKING) != 0)
+	
 	// Mark setup finished, by lighting LED
-	gpio_init_mask(1 << LED);
-	gpio_set_dir_out_masked(1 << LED);
-	gpio_set_mask(1 << LED);
+	gpio_init_mask(1 << LED_BUILTIN);
+	gpio_set_dir_out_masked(1 << LED_BUILTIN);
+	SET_PIN_HIGH(LED_BUILTIN);
 	
-	
+	statusRegister1 |= REG1_READY;
 }
 
 bool loadTrack()
@@ -414,10 +423,11 @@ void setup1()
 	{	
 		cylinderAddressRegister = 0;
 		headAddressRegister = 0;
-		loadTrack();
-	
-		statusRegister1 |= REG1_ON_CYLINDER;
-		statusRegister1 &= ~REG1_REZEROING & ~REG1_SEEKING;
+		if (loadTrack())
+		{
+			statusRegister1 |= REG1_ON_CYLINDER;
+			statusRegister1 &= ~REG1_REZEROING & ~REG1_SEEKING;			
+		}
 	}
 	
 	setupHandshake = false;
@@ -468,14 +478,46 @@ void setIncomingHeadAddress(int pins)
 	incomingHeadAddress = ((readDataBus(pins) >> 2) & 0x03);
 }
 
-bool doneShortRead = false;
+void __not_in_flash_func(DoReadWrite)()
+{
+	SET_PIN_HIGH(DRV_ACK);
+	
+	while (IS_PIN_HIGH(CMD_STROBE))
+	{
+		if (readTrigger)
+		{
+			int sectorNum = currentSector;
+	
+			// Always do a short read
+			for (int i = 0; i < 25; ++i)
+			{
+				read_data_putc(read_pio, 0, currentTrackData[(sectorNum * 540) + i]);
+			}
+			
+			if (readTrigger) // If readTrigger is still HIGH, continue with full read
+			{
+				for (int i = 0; i < 515 /* 540 Total */; ++i)
+				{
+					read_data_putc(read_pio, 0, currentTrackData[(sectorNum * 540) + i]);
+				}
+			}
+		}
+		else if (writeTrigger)
+		{
+			int sectorNum = currentSector;
+			int i = 0;
+			while (writeTrigger || write_data_has_data(write_pio, 0))  // Need to purge the OSR even if writeTrigger has gone LOW
+			{
+				currentTrackData[(sectorNum * 540) + i] = write_data_getc(write_pio, 0);
+				++i;
+			}
+		}
+	}
+}
 
 void loop()
 {
-
-	while (!gpio_get(CMD_STROBE)) ;
-	
-	cmdStrobeTrigger = true;
+	while (IS_PIN_LOW(CMD_STROBE)) ;
 	
 	int pins = gpio_get_all();
 	
@@ -530,45 +572,7 @@ void loop()
 	case 2:  // CMD BYTE 2
 		if (isSelected)
 		{
-			gpio_set_mask(1 << DRV_ACK);
-			
-			while (cmdStrobeTrigger)
-			{
-				if (readTrigger)
-				{
-					if (doneShortRead)
-					{
-						int sectorNum = currentSector;
-						for (int i = 0; i < 540; ++i)
-						{
-							read_data_putc(pio0, 0, currentTrackData[(sectorNum * 540) + i]);
-						}
-						readTrigger = false;
-						doneShortRead = false;
-					}
-					else
-					{
-						int sectorNum = currentSector;
-						for (int i = 0; i < 25; ++i)
-						{
-							read_data_putc(pio0, 0, currentTrackData[(sectorNum * 540) + i]);
-						}
-						readTrigger = false;
-						doneShortRead = true;						
-					}
-				}
-				else if (writeTrigger)
-				{
-					int sectorNum = currentSector;
-					for (int i = 0; i < 540; ++i)
-					{
-						currentTrackData[sectorNum * 540] = write_data_getc(pio1, 0);
-					}	
-					writeTrigger = false;
-					doneShortRead = false;
-				}
-			}
-			
+			DoReadWrite();
 		}
 		break;
 	case 3:  // CMD BYTE 3
@@ -587,7 +591,7 @@ void loop()
 					statusRegister1 &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER & ~REG1_RW_FAULT;
 					statusRegister2 &= ~REG2_RW_UNSAFE;
 					statusRegister1 |= REG1_SEEKING | REG1_REZEROING;
-					gpio_clr_mask(1 << FAULT);
+					SET_PIN_LOW(FAULT);
 				}
 			}
 			else if ((pins & 0x01) != 0) // FAULT CLEAR
@@ -599,7 +603,7 @@ void loop()
 				{
 					statusRegister1 &= ~REG1_RW_FAULT;
 					statusRegister2 &= ~REG2_RW_UNSAFE;
-					gpio_clr_mask(1 << FAULT);
+					SET_PIN_LOW(FAULT);
 				}
 			}
 		}
@@ -647,15 +651,13 @@ void loop()
 		break;
 	}
 	
-	gpio_set_mask(1 << DRV_ACK);	
+	SET_PIN_HIGH(DRV_ACK);	
 
-	while (gpio_get(CMD_STROBE)) ;
-	
-	cmdStrobeTrigger = false;
+	while (IS_PIN_HIGH(CMD_STROBE)) ;
 	
 	setDataBusToInput();
 	
-	gpio_clr_mask(1 << DRV_ACK);
+	SET_PIN_LOW(DRV_ACK);
 }
 
 void loop1()
@@ -675,8 +677,7 @@ void loop1()
 			headAddressRegister = incomingHeadAddress;
 			cylinderAddressRegister = incomingCylinderAddress;
 	
-			success = loadTrack();
-			if (success)
+			if (loadTrack())
 			{
 				statusRegister1 |= REG1_ON_CYLINDER;
 			}
@@ -691,5 +692,6 @@ void loop1()
 		gpio_set_mask(1 << SEEK_COMPLETE);
 		delayMicroseconds(4);
 		gpio_clr_mask(1 << SEEK_COMPLETE);                                                                                                                                                                                           
+		
 	}
 }

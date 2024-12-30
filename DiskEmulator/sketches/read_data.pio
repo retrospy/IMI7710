@@ -1,10 +1,14 @@
 .program read_data
 
 .wrap_target
-	wait 1 gpio 0		// Wait for READ_TRIG to go HIGH
-	wait 0 gpio 14		// Wait for negative edge of clock
-	wait 1 gpio 14		// Wait for postive edge of clock
-	out pins, 1			// Output data
+    set X, 6            ; X = bit count - 2
+    pull
+bitloop:
+    wait 1 gpio 14		; Wait for postive edge of clock
+	wait 0 gpio 14		; Wait for negative edge of clock
+    out pins, 1			; Shift out data bit
+    jmp X-- bitloop     ; Loop runs 7 times
+    out pins, 1         ; Shift out last bit before reloading X
 .wrap
 
 	% c-sdk {
@@ -25,13 +29,14 @@ static inline void read_data_program_init(PIO pio, uint sm, uint offset)
 
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
-    sm_config_set_out_shift(&c, true, true, 8);
+    sm_config_set_out_shift(&c, true, false, 8);
 
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
 
-static inline void read_data_putc(PIO pio, uint sm, char c) {
+static inline void read_data_putc(PIO pio, uint sm, char c) 
+{
     pio_sm_put_blocking(pio, sm, c);
 }
 

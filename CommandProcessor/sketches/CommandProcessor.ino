@@ -42,12 +42,14 @@
 // HD Device ID
 #define ID 0
 
-// Built-in LED
-#define LED 25
-
 // LEDs
 #define BUSY_LED 26
 #define READY_LED 27
+
+#define IS_PIN_HIGH(x) (gpio_get_all() & (1 << x)) != 0
+#define IS_PIN_LOW(x) (gpio_get_all() & (1 << x)) == 0
+#define SET_PIN_HIGH(x) gpio_set_mask(1 << x)
+#define SET_PIN_LOW(x) gpio_clr_mask(1 << x)
 
 bool isSelected = false;
 
@@ -68,12 +70,12 @@ byte getUnitID(int pins)
 
 void setDataBusToRead()
 {
-	gpio_set_mask(1 << BUS_DIRECTION);
+	SET_PIN_HIGH(BUS_DIRECTION);
 }
 
 void setDataBusToWrite()
 {
-	gpio_clr_mask(1 << BUS_DIRECTION);
+	SET_PIN_LOW(BUS_DIRECTION);
 }
 
 void setup()
@@ -106,7 +108,7 @@ void setup()
 	// Set Output Enable
 	gpio_init_mask(1 << OUTPUT_ENABLE);
 	gpio_set_dir_out_masked(1 << OUTPUT_ENABLE); 
-	gpio_set_mask(1 << OUTPUT_ENABLE);  // TODO:  Change this to clr once command processor is working.
+	gpio_clr_mask(1 << OUTPUT_ENABLE); 
 
 	// Setup Command Bus
 	gpio_init_mask(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 1 << BUS_DIRECTION | 0xFF << BUS_0 | 1 << CMD_STROBE | 1 << CMD_ACK);
@@ -128,9 +130,9 @@ void setup()
 	gpio_set_dir_out_masked(0x0F << ADDR0);
 
 	// Mark setup finished, by lighting LED
-	gpio_init_mask(1 << LED | 1 << BUSY_LED | 1 << READY_LED );
-	gpio_set_dir_out_masked(1 << LED | 1 << BUSY_LED | 1 << READY_LED);
-	gpio_set_mask(1 << LED);
+	gpio_init_mask(1 << LED_BUILTIN | 1 << BUSY_LED | 1 << READY_LED);
+	gpio_set_dir_out_masked(1 << LED_BUILTIN | 1 << BUSY_LED | 1 << READY_LED);
+	gpio_set_mask(1 << LED_BUILTIN);
 	gpio_clr_mask(1 << BUSY_LED);
 	gpio_put(READY_LED, !gpio_get(FAULT));
 
@@ -142,9 +144,9 @@ void setup()
 
 void loop()
 {
-	while (!digitalRead(CMD_STROBE)) ;
+	while (IS_PIN_LOW(CMD_STROBE)) ;
 	
-	gpio_set_mask(1 << BUSY_LED);
+	SET_PIN_HIGH(BUSY_LED);
 	
 	int pins = gpio_get_all();
 	
@@ -171,14 +173,14 @@ void loop()
 #endif
 			gpio_put_masked(0x0F << ADDR0, selectedUnit << ADDR0);	
 
-			gpio_set_mask(1 << OUTPUT_ENABLE);
+			SET_PIN_HIGH(OUTPUT_ENABLE);
 		}
 		else
 		{
 #ifdef DEBUG
 			Serial.println("Deactivating drive.");
 #endif
-			gpio_clr_mask(1 << OUTPUT_ENABLE);
+			SET_PIN_LOW(OUTPUT_ENABLE);
 		}
 		break;
 	case 1:
@@ -198,17 +200,17 @@ void loop()
 		break;
 	}
 	
-	while (!digitalRead(DRV_ACK)) ;
+	while (IS_PIN_LOW(DRV_ACK)) ;
 	
-	gpio_set_mask(1 << CMD_ACK);
+	SET_PIN_HIGH(CMD_ACK);
 	
-	while(digitalRead(CMD_STROBE));
+	while(IS_PIN_HIGH(CMD_STROBE));
 	
 	setDataBusToRead();
 	
-	gpio_clr_mask(1 << CMD_ACK);
+	SET_PIN_LOW(CMD_ACK);
 	
 	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
 	
-	gpio_clr_mask(1 << BUSY_LED);
+	SET_PIN_LOW(1 << BUSY_LED);
 }
