@@ -202,6 +202,15 @@ void loop()
 	
 	while (IS_PIN_LOW(DRV_ACK)) ;
 	
+#ifdef DEBUG
+	if (command > 3)
+	{
+		Serial.print("Disk is reporting: ");
+		pins = gpio_get_all();
+		Serial.println(readDataBus(pins), HEX);
+	}
+#endif
+	
 	SET_PIN_HIGH(CMD_ACK);
 	
 	while(IS_PIN_HIGH(CMD_STROBE));
