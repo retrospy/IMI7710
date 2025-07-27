@@ -36,6 +36,7 @@
 #define RW_IN 20
 #define SYS_CLOCK 14
 
+// SD Card Pins
 #define SDPIN 17
 
 // HD Device ID

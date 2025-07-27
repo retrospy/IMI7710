@@ -11,25 +11,33 @@ void setup()
 	
 	gpio_set_dir_out_masked(1 << DRV_ACK);
 	gpio_clr_mask(1 << DRV_ACK);
+	
+	// Setup Command Bus
+	gpio_init_mask(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
+	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
 
 #ifdef DEBUG
 	Serial.begin(115200);
 	while (!Serial) ;
 #endif
 	
-	hd.Setup();
+#ifdef DEBUG
+	Serial.println("DEBUG: Waiting for disk to \"spin up\".");
+#endif
 	
-	// Setup Command Bus
-	gpio_init_mask(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
-	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0 | 0xFF << BUS_0 | 1 << CMD_STROBE);
+	auto existingDrives = hd.Setup();
+	setDataBusToOutput();
+	writeDataBus(existingDrives);
 	
 #ifdef DEBUG
-	Serial.printf("DEBUG: Disk is spun up.  Initializing Command Processor...\r\n");
+	Serial.printf("DEBUG: Disk is \"spun up\".  Starting Command Processor.\r\n");
 #endif
 	
 	gpio_set_mask(1 << DRV_ACK);
 	delay(500);
 	gpio_clr_mask(1 << DRV_ACK);
+	
+	setDataBusToInput();
 	
 	// Mark setup finished, by lighting LED
 	gpio_init_mask(1 << LED_BUILTIN);

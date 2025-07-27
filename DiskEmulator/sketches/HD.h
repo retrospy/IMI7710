@@ -6,7 +6,7 @@ class HD
 {
 public:
 	HD();
-	void Setup();
+	byte Setup();
 	void Setup1();
 	
 	void sendCommand(byte command, byte data);

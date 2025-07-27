@@ -30,6 +30,7 @@
 #define OUTPUT_ENABLE 14
 
 #define BUS_DIRECTION 15
+#define BUS_ENABLE 28
 #define READ LOW
 #define WRITE HIGH
 
@@ -52,6 +53,8 @@
 #define SET_PIN_LOW(x) gpio_clr_mask(1 << x)
 
 bool isSelected = false;
+byte activeDrive = 0;
+byte existingDrives = 0;
 
 byte readDataBus(int pins)
 {
@@ -87,7 +90,7 @@ void setup()
 #endif
 	
 #ifdef DEBUG
-	Serial.print("Waiting for disk to \"spin up\"...");
+	Serial.print("DEBUG: Waiting for disk to \"spin up\".");
 #endif
 	
 	// Setup internal control signals
@@ -101,8 +104,10 @@ void setup()
 	// Wait for disk to "spin up"
 	while (!gpio_get(DRV_ACK)) ;
 	
+	existingDrives = readDataBus(gpio_get_all());
+	
 #ifdef DEBUG
-	Serial.println("Done.");
+	Serial.println("DEBUG: Drive \"spin up\" complete.");
 #endif
 	
 	// Set Output Enable
@@ -115,8 +120,8 @@ void setup()
 	
 	gpio_set_dir_in_masked(1 << CMD_RW | 1 << CMD_SEL1 | 1 << CMD_SEL0);
 
-	gpio_set_dir_out_masked(1 << BUS_DIRECTION);
-	gpio_set_mask(1 << BUS_DIRECTION);
+	gpio_set_dir_out_masked(1 << BUS_DIRECTION | 1 << BUS_ENABLE);
+	gpio_set_mask(1 << BUS_DIRECTION | 1 << BUS_ENABLE);
 	
 	gpio_set_dir_in_masked(0xFF << BUS_0);
 	
@@ -138,7 +143,7 @@ void setup()
 
 	
 #ifdef DEBUG
-	Serial.printf("Drive is fully initialized.  Starting Command Processor...\r\n");
+	Serial.println("DEBUG: Starting Command Processor.");
 #endif
 }
 
@@ -153,10 +158,7 @@ void loop()
 	byte command = getCommand(pins);
 
 #ifdef DEBUG
-	Serial.print("Received command ");
-	Serial.print(command);
-	Serial.print(" with data: ");
-	Serial.println(readDataBus(pins), HEX);
+	Serial.println("DEBUG: Received command " + String(command) + " with data: " + String(pins, HEX));
 #endif
 
 	switch (command)
@@ -164,22 +166,33 @@ void loop()
 		byte selectedUnit;
 		
 	case 0:
-		selectedUnit = getUnitID(pins);
-		isSelected = selectedUnit == ID;
-		if (isSelected)
+		if ((existingDrives & (1 << getUnitID(pins))) != 0)
 		{
+			if (activeDrive != getUnitID(pins))
+			{	
 #ifdef DEBUG
-			Serial.printf("Activating drive with address %d.\r\n", ID);
+				if (isSelected)
+				{
+					Serial.println("DEBUG: Deactivating drive " + String(activeDrive) + ".");
+				}
+				Serial.printf("DEBUG: Activating drive %d.\r\n", getUnitID(pins));
 #endif
-			gpio_put_masked(0x0F << ADDR0, selectedUnit << ADDR0);	
+			}
+			
+			gpio_put_masked(0x0F << ADDR0, getUnitID(pins) << ADDR0);	
 
 			SET_PIN_HIGH(OUTPUT_ENABLE);
+			isSelected = true;
 		}
 		else
 		{
 #ifdef DEBUG
-			Serial.println("Deactivating drive.");
+			if (isSelected)
+			{
+				Serial.println("DEBUG: Deactivating drive " + String(activeDrive) + ".");
+			}
 #endif
+			isSelected = false;
 			SET_PIN_LOW(OUTPUT_ENABLE);
 		}
 		break;

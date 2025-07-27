@@ -11,25 +11,30 @@
 #include "write_data.h"
 #include "write_trig.h"
 
-static volatile bool readTrigger = false;
-static volatile byte currentTrackData[10800];
-static volatile bool flushTrack = false;
 
 // Sector/Index Pulse Variables
 static RPI_PICO_Timer ITimer(0);
+static volatile unsigned int currentSector;	
 
-static volatile short cylinderAddressRegister = 0;
-static volatile byte headAddressRegister = 0;
-static volatile unsigned short incomingCylinderAddress = 0;
-static volatile byte incomingHeadAddress = 0;
+static volatile byte currentTrackData[8][10800];
+static volatile bool flushTrack[8] = { false };
+static volatile int lastSeekTime[8];
+
+static volatile short cylinderAddressRegister[8] = { 0 };
+static volatile byte headAddressRegister[8] = { 0 };
+static volatile unsigned short incomingCylinderAddress[8] = { 0 };
+static volatile byte incomingHeadAddress[8] = { 0 };
 	
-static volatile byte statusRegisters[2] = { 0, 0 };
+static volatile byte statusRegisters[8][2] = { { 0 } };
 
 static volatile bool setupHandshake = false;
 
 static volatile bool isSelected = false;
+static volatile byte activeDrive = 0;
+static volatile byte existingDrives = 0;
 
-static volatile int lastSeekTime;
+volatile bool writeTrigger = false;
+static volatile bool readTrigger = false;
 
 
 static void __not_in_flash_func(readTrigRaiseISR)()
@@ -44,8 +49,6 @@ static void __not_in_flash_func(readTrigLowerISR)()
 	pio_interrupt_clear(read_pio, 1);
 }
 
-volatile bool writeTrigger = false;
-
 static void __not_in_flash_func(writeTrigRaiseISR)()
 {
 	writeTrigger = true;
@@ -58,7 +61,7 @@ static void __not_in_flash_func(writeTrigLowerISR)()
 	pio_interrupt_clear(write_pio, 1);
 }
 
-static volatile unsigned int currentSector;	
+
 
 static bool __not_in_flash_func(SectorIndexPulseISR)(__unused struct repeating_timer *t)
 {
@@ -98,7 +101,7 @@ static void __not_in_flash_func(DoReadWrite)()
 			// Always do a short read
 			for (int i = 0; i < 25; ++i)
 			{
-				byte c = currentTrackData[(sectorNum * 540) + i];
+				byte c = currentTrackData[activeDrive][(sectorNum * 540) + i];
 				read_data_putc(read_pio, 0, c);	
 			}
 			
@@ -106,7 +109,7 @@ static void __not_in_flash_func(DoReadWrite)()
 			{
 				for (int i = 0; i < 515 /* 540 Total */; ++i)
 				{
-					read_data_putc(read_pio, 0, currentTrackData[(sectorNum * 540) + i]);
+					read_data_putc(read_pio, 0, currentTrackData[activeDrive][(sectorNum * 540) + i]);
 				}
 				longRead = true;
 			}
@@ -126,7 +129,7 @@ static void __not_in_flash_func(DoReadWrite)()
 			int i = 0;
 			do   
 			{
-				currentTrackData[(sectorNum * 540) + i] = write_data_getc(write_pio, 0);
+				currentTrackData[activeDrive][(sectorNum * 540) + i] = write_data_getc(write_pio, 0);
 				i++;
 			} while (writeTrigger);
 			
@@ -134,7 +137,7 @@ static void __not_in_flash_func(DoReadWrite)()
 			Serial.println("DEBUG: Write Finished, Bytes Written: " + String(i) + " in " + String(micros()-t) + "us.");
 #endif
 			pio_sm_clear_fifos(write_pio, 0);
-			flushTrack = true;
+			flushTrack[activeDrive] = true;
 			escape = true;
 		}
 	}
@@ -145,15 +148,16 @@ static bool loadTrack()
 	File f = SD.open("hd0.img", FILE_READ);
 	if (!f)
 	{
-		statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
-	if (!f.seek((cylinderAddressRegister * 32400) + (headAddressRegister * 10800)))
+	if (!f.seek((cylinderAddressRegister[activeDrive] * 32400) + (headAddressRegister[activeDrive] * 10800)))
 	{
 		f.close();
-		statusRegisters[1] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
 		gpio_set_mask(1 << FAULT);
 		return false;
 	}
@@ -161,7 +165,7 @@ static bool loadTrack()
 	if (!f.read((uint8_t*)currentTrackData, 10800))
 	{
 		f.close();
-		statusRegisters[1] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
 		gpio_set_mask(1 << FAULT);
 		return false;		
 	}
@@ -175,26 +179,26 @@ static bool saveTrack()
 	File f = SD.open("hd0.img", FILE_WRITE);
 	if (!f)
 	{
-		statusRegisters[0] |= REG1_RW_FAULT;
-		statusRegisters[1] |= REG2_RW_UNSAFE;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
-	if (!f.seek((cylinderAddressRegister * 32400) + (headAddressRegister * 10800)))
+	if (!f.seek((cylinderAddressRegister[activeDrive] * 32400) + (headAddressRegister[activeDrive] * 10800)))
 	{
 		f.close();
-		statusRegisters[0] |= REG1_RW_FAULT;
-		statusRegisters[1] |= REG2_RW_UNSAFE;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;
 	}
 	
-	if (!f.write((const uint8_t*)currentTrackData, 10800))
+	if (!f.write((const uint8_t*)currentTrackData[activeDrive], 10800))
 	{
 		f.close();
-		statusRegisters[0] |= REG1_RW_FAULT;
-		statusRegisters[1] |= REG2_RW_UNSAFE;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 		return false;		
 	}
@@ -203,19 +207,20 @@ static bool saveTrack()
 	return true;
 }
 
-static bool ConfigureSDCard()
+static byte ConfigureSDCard()
 {
 	bool rwFailure = false;
 	
 	for (int i = 0; i < 10800; ++i)
-		currentTrackData[i] = 0;
+		currentTrackData[activeDrive][i] = 0;
 	
 	if (!SD.begin(SDPIN))
 	{
 #ifdef DEBUG
 		Serial.println("Error intializing SD card.");
 #endif
-		statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+		statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 	}
 	else
@@ -232,7 +237,8 @@ static bool ConfigureSDCard()
 			if (!f)
 			{
 				rwFailure = true;
-				statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+				statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+				statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 				gpio_set_mask(1 << FAULT);
 			}
 			else
@@ -243,7 +249,8 @@ static bool ConfigureSDCard()
 					if (wrote < 10800)
 					{
 						rwFailure = true;
-						statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+						statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+						statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 						gpio_set_mask(1 << FAULT);
 						f.close();
 						break;
@@ -263,7 +270,8 @@ static bool ConfigureSDCard()
 						if (!didSeek)
 						{
 							rwFailure = true;
-							statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+							statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+							statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 							gpio_set_mask(1 << FAULT);
 							break;
 						}
@@ -273,7 +281,8 @@ static bool ConfigureSDCard()
 							if (wrote != 1)
 							{
 								rwFailure = true;
-								statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+								statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+								statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 								gpio_set_mask(1 << FAULT);
 								break;
 							}
@@ -300,7 +309,8 @@ static bool ConfigureSDCard()
 			if (!f)
 			{
 				rwFailure = true;
-				statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+				statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+				statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 				gpio_set_mask(1 << FAULT);
 			}
 			else
@@ -311,7 +321,8 @@ static bool ConfigureSDCard()
 					Serial.println("DEBUG: hd0.img is the wrong size.  Most likely it is corrupt.");
 #endif
 					rwFailure = true;
-					statusRegisters[1] |= REG1_RW_FAULT | REG2_RW_UNSAFE;
+					statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
+					statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
 					gpio_set_mask(1 << FAULT);
 				}
 
@@ -321,7 +332,7 @@ static bool ConfigureSDCard()
 		}
 	}
 	
-	return !rwFailure;
+	return rwFailure ? 0 : 1;
 }
 
 
@@ -329,7 +340,7 @@ HD::HD()
 {
 }
 
-void HD::Setup()
+byte HD::Setup()
 {
 	// Setup PIO 0 state machines
 	uint offset = pio_add_program(read_pio, &read_data_program);
@@ -364,7 +375,7 @@ void HD::Setup()
 	irq_set_exclusive_handler(PIO1_IRQ_1, writeTrigLowerISR);
 	irq_set_enabled(PIO1_IRQ_1, true);
 	
-	statusRegisters[0] |= REG1_REZEROING & REG1_SEEKING;
+	statusRegisters[activeDrive][0] |= REG1_REZEROING & REG1_SEEKING;
 	
 #ifdef DEBUG
 	Serial.print("DEBUG: Waiting for disk to \"spin up\".");
@@ -373,14 +384,16 @@ void HD::Setup()
 	setupHandshake = true;
 	while (setupHandshake) ;
 	
-	lastSeekTime = millis();
+	lastSeekTime[activeDrive] = millis();
 	
-	while ((statusRegisters[0] & REG1_SEEKING) != 0) ;
-	statusRegisters[0] |= REG1_READY;
+	while ((statusRegisters[activeDrive][0] & REG1_SEEKING) != 0) ;
+	statusRegisters[activeDrive][0] |= REG1_READY;
 	
 #ifdef DEBUG
 	Serial.println("DEBUG: Disk is finished \"spinning up\".");
 #endif
+	
+	return existingDrives;
 }
 
 void HD::Setup1()
@@ -400,15 +413,24 @@ void HD::Setup1()
 	ITimer.attachInterruptInterval(833.5, SectorIndexPulseISR);
 	
 	// Setup SD card access
-	if (ConfigureSDCard())
+	existingDrives = ConfigureSDCard();
+	if (existingDrives)
 	{	
-		cylinderAddressRegister = 0;
-		headAddressRegister = 0;
-		if (loadTrack())
+		for (activeDrive = 0; activeDrive < 8; ++activeDrive)
 		{
-			statusRegisters[0] |= REG1_ON_CYLINDER;
-			statusRegisters[0] &= ~REG1_REZEROING & ~REG1_SEEKING;			
+			if ((existingDrives & (1 << activeDrive)) != 0)
+			{
+				cylinderAddressRegister[activeDrive] = 0;
+				headAddressRegister[activeDrive] = 0;
+
+				if (loadTrack())
+				{
+					statusRegisters[activeDrive][0] |= REG1_ON_CYLINDER;
+					statusRegisters[activeDrive][0] &= ~REG1_REZEROING & ~REG1_SEEKING;			
+				}
+			}
 		}
+		activeDrive = 0;
 	}
 	
 	setupHandshake = false;
@@ -416,29 +438,29 @@ void HD::Setup1()
 
 static void setIncomingCylinderAddressHigh(byte data)
 {
-	incomingCylinderAddress = (incomingCylinderAddress & ~(0x03 << 8)) | ((data & 0x03) << 8);
+	incomingCylinderAddress[activeDrive] = (incomingCylinderAddress[activeDrive] & ~(0x03 << 8)) | ((data & 0x03) << 8);
 }
 
 static void setIncomingCylinderAddressLow(byte data)
 {
-	incomingCylinderAddress = (incomingCylinderAddress & ~0xFF) | data;
+	incomingCylinderAddress[activeDrive] = (incomingCylinderAddress[activeDrive] & ~0xFF) | data;
 }
 
 static void setIncomingHeadAddress(byte data)
 {
-	incomingHeadAddress = ((data >> 2) & 0x03);
+	incomingHeadAddress[activeDrive] = ((data >> 2) & 0x03);
 }
 
 void HD::loop1()
 {
 	bool success;
 	
-	if (flushTrack && (millis() - lastSeekTime >= 2000) && (statusRegisters[1] & REG2_RW_UNSAFE) == 0)
+	if (flushTrack[activeDrive] && (millis() - lastSeekTime[activeDrive] >= 2000) && (statusRegisters[activeDrive][1] & REG2_RW_UNSAFE) == 0)
 	{
 		if (saveTrack())
 		{
-			flushTrack = false;
-			lastSeekTime = millis();
+			flushTrack[activeDrive] = false;
+			lastSeekTime[activeDrive] = millis();
 			Serial.println("DEBUG: Current track flushed to disk.");
 		}
 		else
@@ -447,21 +469,21 @@ void HD::loop1()
 		}
 	}
 	
-	if ((statusRegisters[0] & REG1_SEEKING) != 0)
+	if ((statusRegisters[activeDrive][0] & REG1_SEEKING) != 0)
 	{
-		if (headAddressRegister != incomingHeadAddress || cylinderAddressRegister != incomingCylinderAddress)
+		if (headAddressRegister[activeDrive] != incomingHeadAddress[activeDrive] || cylinderAddressRegister[activeDrive] != incomingCylinderAddress[activeDrive])
 		{
-			headAddressRegister = incomingHeadAddress;
-			cylinderAddressRegister = incomingCylinderAddress;
+			headAddressRegister[activeDrive] = incomingHeadAddress[activeDrive];
+			cylinderAddressRegister[activeDrive] = incomingCylinderAddress[activeDrive];
 	
 #ifdef DEBUG
-			Serial.println("DEBUG: Seeking to cylinder " + String(cylinderAddressRegister, HEX) + " and head " + String(headAddressRegister, HEX));
+			Serial.println("DEBUG: Seeking to cylinder " + String(cylinderAddressRegister[activeDrive], HEX) + " and head " + String(headAddressRegister[activeDrive], HEX));
 #endif
-			if (flushTrack && (statusRegisters[1] & REG2_RW_UNSAFE) == 0)
+			if (flushTrack[activeDrive] && (statusRegisters[activeDrive][1] & REG2_RW_UNSAFE) == 0)
 			{
 				if (saveTrack())
 				{
-					flushTrack = false;
+					flushTrack[activeDrive] = false;
 					Serial.println("DEBUG: Current track flushed to disk.");
 				}
 				else
@@ -472,16 +494,16 @@ void HD::loop1()
 
 			if (loadTrack())
 			{
-				lastSeekTime = millis();
-				statusRegisters[0] |= REG1_ON_CYLINDER;
+				lastSeekTime[activeDrive] = millis();
+				statusRegisters[activeDrive][0] |= REG1_ON_CYLINDER;
 			}
 		}
 		else
 		{
-			statusRegisters[0] |= REG1_ON_CYLINDER;
+			statusRegisters[activeDrive][0] |= REG1_ON_CYLINDER;
 		}
 		
-		statusRegisters[0] &= ~REG1_SEEKING & ~REG1_REZEROING;
+		statusRegisters[activeDrive][0] &= ~REG1_SEEKING & ~REG1_REZEROING;
 		
 		gpio_set_mask(1 << SEEK_COMPLETE);
 		delayMicroseconds(4);
@@ -499,23 +521,43 @@ void HD::sendCommand(byte command, byte data)
 {
 	switch (command)
 	{
-		byte unitSelect;
-		
+
 	case 0:
-		isSelected = getUnitID(data) == ID;
-	
-		if (isSelected)
+		if ((existingDrives & (1 << getUnitID(data))) != 0)
 		{
+			if (activeDrive != getUnitID(data))
+			{	
 #ifdef DEBUG
-			Serial.printf("DEBUG: Activating drive with address %d.\r\n", ID);
+				if (isSelected)
+				{
+					Serial.println("DEBUG: Deactivating drive " + String(activeDrive) + ".");
+				}
 #endif
+				if (flushTrack[activeDrive] == true)
+				{
+					// TODO: Need to handle flushing the current drives track, if necessary.
+				}
+				else
+				{
+					// TODO: Need to handle flushing the current drives track, if necessary.
+				}
+#ifdef DEBUG
+				Serial.printf("DEBUG: Activating drive %d.\r\n", getUnitID(data));
+#endif
+			}
+			
+			activeDrive = getUnitID(data);
 			setIncomingHeadAddress(data);
 			setIncomingCylinderAddressHigh(data);
+			isSelected = true; 
 		}
 		else
 		{
 #ifdef DEBUG
-			Serial.println("DEBUG: Deactivating drive.");
+			if (isSelected)
+			{
+				Serial.println("DEBUG: Deactivating drive " + String(activeDrive) + ".");
+			}
 #endif
 			isSelected = false;
 		}
@@ -525,17 +567,17 @@ void HD::sendCommand(byte command, byte data)
 		{
 			setIncomingCylinderAddressLow(data);
 
-			if (incomingCylinderAddress > 353)
+			if (incomingCylinderAddress[activeDrive] > 353)
 			{
 #ifdef DEBUG
-				Serial.println("ERROR: Illegal Address Requested, Head=" + String(incomingHeadAddress) + " Cylinder=" + String(incomingCylinderAddress));
+				Serial.println("ERROR: Illegal Address Requested, Head=" + String(incomingHeadAddress[activeDrive]) + " Cylinder=" + String(incomingCylinderAddress[activeDrive]));
 #endif
-				statusRegisters[0] |= REG1_ILLEGAL_ADDRESS;
+				statusRegisters[activeDrive][0] |= REG1_ILLEGAL_ADDRESS;
 			}
 			else
 			{
-				statusRegisters[0] &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER;
-				statusRegisters[0] |= REG1_SEEKING;
+				statusRegisters[activeDrive][0] &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER;
+				statusRegisters[activeDrive][0] |= REG1_SEEKING;
 			}
 		}
 		break;
@@ -553,20 +595,20 @@ void HD::sendCommand(byte command, byte data)
 #ifdef DEBUG
 				Serial.println("DEBUG: Rezero-ing Drive");
 #endif
-				statusRegisters[0] &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER & ~REG1_RW_FAULT;
-				statusRegisters[1] &= ~REG2_RW_UNSAFE;
+				statusRegisters[activeDrive][0] &= ~REG1_ILLEGAL_ADDRESS & ~REG1_ON_CYLINDER & ~REG1_RW_FAULT;
+				statusRegisters[activeDrive][1] &= ~REG2_RW_UNSAFE;
 				SET_PIN_LOW(FAULT);
-				incomingCylinderAddress = 0;
-				incomingHeadAddress = 0;
-				statusRegisters[0] |= REG1_SEEKING | REG1_REZEROING;
+				incomingCylinderAddress[activeDrive] = 0;
+				incomingHeadAddress[activeDrive] = 0;
+				statusRegisters[activeDrive][0] |= REG1_SEEKING | REG1_REZEROING;
 			}
 			else if ((data & 0x01) != 0) // FAULT CLEAR
 			{
 #ifdef DEBUG
 				Serial.println("DEBUG: Clearing Fault");
 #endif
-				statusRegisters[0] &= ~REG1_RW_FAULT;
-				statusRegisters[1] &= ~REG2_RW_UNSAFE;
+				statusRegisters[activeDrive][0] &= ~REG1_RW_FAULT;
+				statusRegisters[activeDrive][1] &= ~REG2_RW_UNSAFE;
 				SET_PIN_LOW(FAULT);
 			}
 		}
@@ -582,24 +624,24 @@ bool HD::getStatus(byte command, byte& result)
 		{
 		case 4:
 #ifdef DEBUG
-			Serial.println("DEBUG: Outputting Register 1: " + String(statusRegisters[0], BIN));
+			Serial.println("DEBUG: Outputting Register 1: " + String(statusRegisters[activeDrive][0], BIN));
 #endif
-			result = statusRegisters[0];
+			result = statusRegisters[activeDrive][0];
 			break;
 		case 5:
 #ifdef DEBUG
-			Serial.println("DEBUG: Outputting Register 2: " + String(statusRegisters[1], BIN));
+			Serial.println("DEBUG: Outputting Register 2: " + String(statusRegisters[activeDrive][1], BIN));
 #endif
-			result = statusRegisters[1];
+			result = statusRegisters[activeDrive][1];
 			break;
 		case 6:
-			result = cylinderAddressRegister & 0xFF;
+			result = cylinderAddressRegister[activeDrive] & 0xFF;
 #ifdef DEBUG
 			Serial.println("DEBUG: Outputting Current CMD BYTE 1 Settings: " + String(result, BIN));
 #endif
 			break;
 		case 7:
-			result = ((ID & 0x0F) << 4) | ((headAddressRegister & 0x03)) << 2 | ((cylinderAddressRegister & 0x300) >> 8);
+			result = ((ID & 0x0F) << 4) | ((headAddressRegister[activeDrive] & 0x03)) << 2 | ((cylinderAddressRegister[activeDrive] & 0x300) >> 8);
 #ifdef DEBUG
 			Serial.println("DEBUG: Outputting Current CMD BYTE 0 Settings: " + String(result, BIN));
 #endif
