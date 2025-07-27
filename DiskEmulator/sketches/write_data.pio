@@ -1,10 +1,24 @@
 .program write_data
 
+;.wrap_target
+	;wait 1 gpio 1		; Wait for WRITE_TRIG to go HIGH
+    ;wait 0 gpio 14		; Wait for negative edge of clock
+	;wait 1 gpio 14		; Wait for postive edge of clock
+	;in pins, 1			; Shift in data bit
+;.wrap
+
 .wrap_target
-	wait 1 gpio 1		; Wait for WRITE_TRIG to go HIGH
-    wait 0 gpio 14		; Wait for negative edge of clock
+    set X, 6            ; X = bit count - 2
+    wait 1 gpio 1		; Wait for WRITE_TRIG to go HIGH
+bitloop:
+    wait 0 gpio 14  	; Wait for negative edge of clock
 	wait 1 gpio 14		; Wait for postive edge of clock
-	in pins, 1			; Shift in data bit
+    in pins, 1			; Shift in data bit
+    jmp X-- bitloop     ; Loop runs 7 times
+    wait 0 gpio 14  	; Wait for negative edge of clock
+	wait 1 gpio 14		; Wait for postive edge of clock
+    in pins, 1          ; Shift in last bit before reloading X
+    push noblock        ; Push data to RX FIFO without blocking
 .wrap
 
 % c-sdk {
@@ -24,7 +38,7 @@ static inline void write_data_program_init(PIO pio, uint sm, uint offset)
 
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
 
-    sm_config_set_in_shift(&c, true, true, 8);
+    sm_config_set_in_shift(&c, false, false, 8);
 
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);

@@ -7,7 +7,7 @@
     </CustomSourceDirectories>
     <AutoProgramSPIFFSPartition>true</AutoProgramSPIFFSPartition>
     <ProjectModeSettings>
-      <ProjectGUID>216f00e3-e9e0-4dc6-8380-7bf65bf2892d</ProjectGUID>
+      <ProjectGUID>81298a7b-7559-4585-801f-54b7a7748270</ProjectGUID>
       <GroupSourcesByTypes>true</GroupSourcesByTypes>
       <GroupSourcesByPaths>true</GroupSourcesByPaths>
       <SketchSubdirectory>sketches</SketchSubdirectory>
@@ -19,14 +19,18 @@
         </Files>
       </RootSketchFolder>
       <OtherFiles>
-        <string>sketches\read_data.pio</string>
-        <string>sketches\read_trig.pio</string>
-        <string>sketches\write_data.pio</string>
-        <string>sketches\write_trig.pio</string>
+        <string>sketches\common.h</string>
+        <string>sketches\HD.h</string>
+        <string>sketches\rw_clock.h</string>
+        <string>sketches\rw_clock.pio</string>
         <string>sketches\read_data.h</string>
+        <string>sketches\read_data.pio</string>
         <string>sketches\read_trig.h</string>
+        <string>sketches\read_trig.pio</string>
         <string>sketches\write_data.h</string>
+        <string>sketches\write_data.pio</string>
         <string>sketches\write_trig.h</string>
+        <string>sketches\write_trig.pio</string>
       </OtherFiles>
     </ProjectModeSettings>
   </Project>
@@ -34,7 +38,7 @@
     <BuildLogMode xsi:nil="true" />
     <IgnoreNormalLibraryDirectories>false</IgnoreNormalLibraryDirectories>
     <OutputSubdirectory>Output\$(PlatformName.defuse)\$(ConfigurationName.defuse)</OutputSubdirectory>
-    <EnableVerboseBuild>true</EnableVerboseBuild>
+    <EnableVerboseBuild>false</EnableVerboseBuild>
     <PreprocessorMacros>
       <Common>
         <string>PICO_COPY_TO_RAM</string>
@@ -110,6 +114,7 @@
           <EnableAsyncExecutionMode>false</EnableAsyncExecutionMode>
           <AsyncModeSupportsBreakpoints>true</AsyncModeSupportsBreakpoints>
           <TemporaryBreakConsolidationTimeout>0</TemporaryBreakConsolidationTimeout>
+          <BacktraceFrameLimit>0</BacktraceFrameLimit>
           <EnableNonStopMode>false</EnableNonStopMode>
           <MaxBreakpointLimit>0</MaxBreakpointLimit>
           <EnableVerboseMode>true</EnableVerboseMode>
@@ -138,17 +143,6 @@
         <SoftwareTracingSettings>
           <TraceWhileDebugging>true</TraceWhileDebugging>
           <AutoStart>false</AutoStart>
-          <WorkArea xsi:type="AfterData">
-            <EndSymbolName>end</EndSymbolName>
-            <LastSectionName>.bss</LastSectionName>
-          </WorkArea>
-          <StaticTracePrograms xsi:type="AfterSection">
-            <SectionName>.text</SectionName>
-            <AddressLimit>18446744073709551615</AddressLimit>
-            <SectionGap>1048576</SectionGap>
-            <MaxSize>1048576</MaxSize>
-            <Alignment>64</Alignment>
-          </StaticTracePrograms>
           <DynamicProgramAreaSize>0</DynamicProgramAreaSize>
           <SkipInitiallyDisabledTracepoints>false</SkipInitiallyDisabledTracepoints>
           <TraceProgramOptimization>Size</TraceProgramOptimization>
@@ -157,22 +151,14 @@
           <InstrumentWithNoFeasibleTracepoints>false</InstrumentWithNoFeasibleTracepoints>
           <MaximumStringLength>255</MaximumStringLength>
           <DeferVectorTablePatching>true</DeferVectorTablePatching>
-          <ShowAdvancedConfiguration>true</ShowAdvancedConfiguration>
+          <ShowAdvancedConfiguration>false</ShowAdvancedConfiguration>
           <WorkAreaSize>4096</WorkAreaSize>
           <DisableLiveCodePatching>false</DisableLiveCodePatching>
         </SoftwareTracingSettings>
-        <RelatedExecutables>
-          <RelatedExecutable>
-            <Program>false</Program>
-            <LoadSymbols>false</LoadSymbols>
-            <ShowInLiveWatch>false</ShowInLiveWatch>
-          </RelatedExecutable>
-        </RelatedExecutables>
         <CheckInterfaceDrivers>true</CheckInterfaceDrivers>
       </DebugSettingsOverride>
       <BuildSettingsExtension xsi:type="com.visualgdb.build.external.arduino.extension">
         <BoardID>rp2040:rp2040:rpipico</BoardID>
-        <COMPort />
         <Properties>
           <Entries>
             <KeyValue>
@@ -181,11 +167,15 @@
             </KeyValue>
             <KeyValue>
               <Key>freq</Key>
-              <Value>240</Value>
+              <Value>250</Value>
             </KeyValue>
             <KeyValue>
               <Key>opt</Key>
               <Value>Optimize3</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>profile</Key>
+              <Value>Disabled</Value>
             </KeyValue>
             <KeyValue>
               <Key>rtti</Key>
@@ -221,7 +211,7 @@
             </KeyValue>
           </Entries>
         </Properties>
-        <DebugUnoptimizedComponentTypes>Sketch</DebugUnoptimizedComponentTypes>
+        <DebugUnoptimizedComponentTypes>None</DebugUnoptimizedComponentTypes>
       </BuildSettingsExtension>
     </VisualGDBConfiguration>
   </Configurations>

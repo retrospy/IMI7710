@@ -7,7 +7,7 @@
     </CustomSourceDirectories>
     <AutoProgramSPIFFSPartition>true</AutoProgramSPIFFSPartition>
     <ProjectModeSettings>
-      <ProjectGUID>6940ff10-91c7-4846-b9f6-b3d97390e3e7</ProjectGUID>
+      <ProjectGUID>40bf9742-5a71-46f4-99aa-7629cda7bb52</ProjectGUID>
       <GroupSourcesByTypes>true</GroupSourcesByTypes>
       <GroupSourcesByPaths>true</GroupSourcesByPaths>
       <SketchSubdirectory>sketches</SketchSubdirectory>
@@ -26,11 +26,7 @@
     <IgnoreNormalLibraryDirectories>false</IgnoreNormalLibraryDirectories>
     <OutputSubdirectory>Output\$(PlatformName.defuse)\$(ConfigurationName.defuse)</OutputSubdirectory>
     <EnableVerboseBuild>false</EnableVerboseBuild>
-    <PreprocessorMacros>
-      <Common>
-        <string>PICO_COPY_TO_RAM</string>
-      </Common>
-    </PreprocessorMacros>
+    <PreprocessorMacros />
     <ExtraLinkerFlags>
       <string>-Wl,-q</string>
     </ExtraLinkerFlags>
@@ -54,7 +50,6 @@
     <ShowMessageAfterExecuting>true</ShowMessageAfterExecuting>
   </CustomShortcuts>
   <UserDefinedVariables />
-  <ImportedPropertySheets />
   <CodeSense>
     <Enabled>Unknown</Enabled>
     <ExtraSettings>
@@ -101,6 +96,7 @@
           <EnableAsyncExecutionMode>false</EnableAsyncExecutionMode>
           <AsyncModeSupportsBreakpoints>true</AsyncModeSupportsBreakpoints>
           <TemporaryBreakConsolidationTimeout>0</TemporaryBreakConsolidationTimeout>
+          <BacktraceFrameLimit>0</BacktraceFrameLimit>
           <EnableNonStopMode>false</EnableNonStopMode>
           <MaxBreakpointLimit>0</MaxBreakpointLimit>
           <EnableVerboseMode>true</EnableVerboseMode>
@@ -145,7 +141,6 @@
       </DebugSettingsOverride>
       <BuildSettingsExtension xsi:type="com.visualgdb.build.external.arduino.extension">
         <BoardID>rp2040:rp2040:rpipico</BoardID>
-        <COMPort />
         <Properties>
           <Entries>
             <KeyValue>
@@ -154,11 +149,15 @@
             </KeyValue>
             <KeyValue>
               <Key>freq</Key>
-              <Value>240</Value>
+              <Value>200</Value>
             </KeyValue>
             <KeyValue>
               <Key>opt</Key>
-              <Value>Optimize3</Value>
+              <Value>Small</Value>
+            </KeyValue>
+            <KeyValue>
+              <Key>profile</Key>
+              <Value>Disabled</Value>
             </KeyValue>
             <KeyValue>
               <Key>rtti</Key>
@@ -198,5 +197,4 @@
       </BuildSettingsExtension>
     </VisualGDBConfiguration>
   </Configurations>
-  <ProgramArgumentsSuggestions />
 </VisualGDBProjectSettings2>

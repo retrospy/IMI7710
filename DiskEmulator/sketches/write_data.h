@@ -13,51 +13,56 @@
 // ---------- //
 
 #define write_data_wrap_target 0
-#define write_data_wrap 3
+#define write_data_wrap 9
 
 static const uint16_t write_data_program_instructions[] = {
-            //     .wrap_target
-    0x2081, //  0: wait   1 gpio, 1                  
-    0x200e, //  1: wait   0 gpio, 14                 
-    0x208e, //  2: wait   1 gpio, 14                 
-    0x4001, //  3: in     pins, 1                    
-            //     .wrap
+		//     .wrap_target
+0xe026,	//  0: set    x, 6                       
+0x2081,	//  1: wait   1 gpio, 1                  
+0x200e,	//  2: wait   0 gpio, 14                 
+0x208e,	//  3: wait   1 gpio, 14                 
+0x4001,	//  4: in     pins, 1                    
+0x0042,	//  5: jmp    x--, 2                     
+0x200e,	//  6: wait   0 gpio, 14                 
+0x208e,	//  7: wait   1 gpio, 14                 
+0x4001,	//  8: in     pins, 1                    
+0x8000,	//  9: push   noblock                    
+        //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program write_data_program = {
-    .instructions = write_data_program_instructions,
-    .length = 4,
-    .origin = -1,
+	.instructions = write_data_program_instructions,
+	.length = 10,
+	.origin = -1,
 };
 
 static inline pio_sm_config write_data_program_get_default_config(uint offset) {
-    pio_sm_config c = pio_get_default_sm_config();
-    sm_config_set_wrap(&c, offset + write_data_wrap_target, offset + write_data_wrap);
-    return c;
+	pio_sm_config c = pio_get_default_sm_config();
+	sm_config_set_wrap(&c, offset + write_data_wrap_target, offset + write_data_wrap);
+	return c;
 }
 
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 static inline void write_data_program_init(PIO pio, uint sm, uint offset) 
 {    
-    pio_sm_config c = write_data_program_get_default_config(offset);
-    sm_config_set_in_pins(&c, 20);
-    pio_sm_set_pindirs_with_mask(pio, sm, ~(1u << 20), 1u << 20);
-    pio_gpio_init(pio, 20);
-    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
-    sm_config_set_in_shift(&c, true, true, 8);
-    pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
+	pio_sm_config c = write_data_program_get_default_config(offset);
+	sm_config_set_in_pins(&c, 20);
+	pio_sm_set_pindirs_with_mask(pio, sm, ~(1u << 20), 1u << 20);
+	pio_gpio_init(pio, 20);
+	sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+	sm_config_set_in_shift(&c, false, false, 8);
+	pio_sm_init(pio, sm, offset, &c);
+	pio_sm_set_enabled(pio, sm, true);
 }
 static inline char write_data_getc(PIO pio, uint sm) 
 {
-    return pio_sm_get_blocking(pio, sm);
+	return pio_sm_get_blocking(pio, sm);
 }
 static inline bool write_data_has_data(PIO pio, uint sm)
 {
-    return !pio_sm_is_rx_fifo_empty(pio, sm);
+	return !pio_sm_is_rx_fifo_empty(pio, sm);
 }
 
 #endif
-

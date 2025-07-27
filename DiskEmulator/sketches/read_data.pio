@@ -8,6 +8,8 @@ bitloop:
 	wait 0 gpio 14		; Wait for negative edge of clock
     out pins, 1			; Shift out data bit
     jmp X-- bitloop     ; Loop runs 7 times
+    wait 1 gpio 14		; Wait for postive edge of clock
+	wait 0 gpio 14		; Wait for negative edge of clock
     out pins, 1         ; Shift out last bit before reloading X
 .wrap
 

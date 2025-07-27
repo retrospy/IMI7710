@@ -7,7 +7,7 @@
     </CustomSourceDirectories>
     <AutoProgramSPIFFSPartition>true</AutoProgramSPIFFSPartition>
     <ProjectModeSettings>
-      <ProjectGUID>b0f44cdc-fe47-4bc3-8aa4-dd42fdb61eee</ProjectGUID>
+      <ProjectGUID>0a4c4e8d-1b61-4cd8-9a23-068da428bd11</ProjectGUID>
       <GroupSourcesByTypes>true</GroupSourcesByTypes>
       <GroupSourcesByPaths>true</GroupSourcesByPaths>
       <SketchSubdirectory>sketches</SketchSubdirectory>
@@ -96,6 +96,7 @@
           <EnableAsyncExecutionMode>false</EnableAsyncExecutionMode>
           <AsyncModeSupportsBreakpoints>true</AsyncModeSupportsBreakpoints>
           <TemporaryBreakConsolidationTimeout>0</TemporaryBreakConsolidationTimeout>
+          <BacktraceFrameLimit>0</BacktraceFrameLimit>
           <EnableNonStopMode>false</EnableNonStopMode>
           <MaxBreakpointLimit>0</MaxBreakpointLimit>
           <EnableVerboseMode>true</EnableVerboseMode>
@@ -140,7 +141,6 @@
       </DebugSettingsOverride>
       <BuildSettingsExtension xsi:type="com.visualgdb.build.external.arduino.extension">
         <BoardID>teensy:avr:teensy40</BoardID>
-        <COMPort />
         <Properties>
           <Entries>
             <KeyValue>

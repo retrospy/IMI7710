@@ -214,7 +214,7 @@ void loop()
 	
 	SET_PIN_HIGH(CMD_ACK);
 	
-	while (IS_PIN_HIGH(CMD_STROBE)) ;
+	while(IS_PIN_HIGH(CMD_STROBE));
 	
 	setDataBusToRead();
 	
