@@ -24,7 +24,7 @@ void setup()
 #endif
 	
 #ifdef DEBUG
-	Serial.println("DEBUG: Waiting for disk to \"spin up\".");
+	Serial.println("DEBUG: Waiting for HD to initialize.");
 #endif
 	
 	hd.Setup();
@@ -32,7 +32,7 @@ void setup()
 	//writeDataBus(existingDrives);
 	
 #ifdef DEBUG
-	Serial.printf("DEBUG: Disk is \"spun up\".  Starting Command Processor.\r\n");
+	Serial.println("DEBUG: HD is initialized.  Starting Command Processor.");
 #endif
 	
 	gpio_set_mask(1 << DRV_ACK);
