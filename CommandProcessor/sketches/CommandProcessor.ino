@@ -90,7 +90,7 @@ void setup()
 #endif
 	
 #ifdef DEBUG
-	Serial.print("DEBUG: Waiting for disk to \"spin up\".");
+	Serial.println("DEBUG: Waiting for disk to \"spin up\".");
 #endif
 	
 	// Setup internal control signals
@@ -104,7 +104,8 @@ void setup()
 	// Wait for disk to "spin up"
 	while (!gpio_get(DRV_ACK)) ;
 	
-	existingDrives = readDataBus(gpio_get_all());
+	existingDrives = 1; //readDataBus(gpio_get_all());
+	Serial.println("DEBUG: Drive Identification Bitmap = " + String(existingDrives, HEX));
 	
 #ifdef DEBUG
 	Serial.println("DEBUG: Drive \"spin up\" complete.");
@@ -158,7 +159,7 @@ void loop()
 	byte command = getCommand(pins);
 
 #ifdef DEBUG
-	Serial.println("DEBUG: Received command " + String(command) + " with data: " + String(pins, HEX));
+	Serial.println("DEBUG: Received command " + String(command) + " with data: " + String(readDataBus(pins), HEX));
 #endif
 
 	switch (command)
@@ -168,7 +169,7 @@ void loop()
 	case 0:
 		if ((existingDrives & (1 << getUnitID(pins))) != 0)
 		{
-			if (activeDrive != getUnitID(pins))
+			if (activeDrive != getUnitID(pins) || isSelected == false)
 			{	
 #ifdef DEBUG
 				if (isSelected)
@@ -219,18 +220,24 @@ void loop()
 #ifdef DEBUG
 	if (command > 3)
 	{
-		Serial.print("Disk is reporting: ");
 		pins = gpio_get_all();
-		Serial.println(readDataBus(pins), HEX);
+		Serial.println("DEBUG: Disk is reporting " + String(readDataBus(pins), HEX) + " on the data bus.");
 	}
 #endif
 	
 	SET_PIN_HIGH(CMD_ACK);
 	
+#ifdef DEBUG
+	Serial.println("DEBUG: Waiting for Strobe to lower.");
+#endif
+	
 	while (IS_PIN_HIGH(CMD_STROBE)) ;
 	
 	setDataBusToRead();
 	
+#ifdef DEBUG
+	Serial.println("DEBUG: Lowering ACK.");
+#endif
 	SET_PIN_LOW(CMD_ACK);
 	
 	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);

@@ -33,7 +33,7 @@ static volatile bool isSelected = false;
 static volatile byte activeDrive = 0;
 static volatile byte existingDrives = 0;
 
-volatile bool writeTrigger = false;
+static volatile bool writeTrigger = false;
 static volatile bool readTrigger = false;
 
 
@@ -209,18 +209,19 @@ static bool saveTrack()
 
 static byte ConfigureSDCard()
 {
+	int currentDrive = 0;
 	bool rwFailure = false;
 	
 	for (int i = 0; i < 10800; ++i)
-		currentTrackData[activeDrive][i] = 0;
+		currentTrackData[currentDrive][i] = 0;
 	
 	if (!SD.begin(SDPIN))
 	{
 #ifdef DEBUG
 		Serial.println("Error intializing SD card.");
 #endif
-		statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-		statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+		statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+		statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 		gpio_set_mask(1 << FAULT);
 	}
 	else
@@ -237,8 +238,8 @@ static byte ConfigureSDCard()
 			if (!f)
 			{
 				rwFailure = true;
-				statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-				statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+				statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+				statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 				gpio_set_mask(1 << FAULT);
 			}
 			else
@@ -249,8 +250,8 @@ static byte ConfigureSDCard()
 					if (wrote < 10800)
 					{
 						rwFailure = true;
-						statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-						statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+						statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+						statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 						gpio_set_mask(1 << FAULT);
 						f.close();
 						break;
@@ -270,8 +271,8 @@ static byte ConfigureSDCard()
 						if (!didSeek)
 						{
 							rwFailure = true;
-							statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-							statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+							statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+							statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 							gpio_set_mask(1 << FAULT);
 							break;
 						}
@@ -281,8 +282,8 @@ static byte ConfigureSDCard()
 							if (wrote != 1)
 							{
 								rwFailure = true;
-								statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-								statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+								statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+								statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 								gpio_set_mask(1 << FAULT);
 								break;
 							}
@@ -309,8 +310,8 @@ static byte ConfigureSDCard()
 			if (!f)
 			{
 				rwFailure = true;
-				statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-				statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+				statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+				statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 				gpio_set_mask(1 << FAULT);
 			}
 			else
@@ -321,8 +322,8 @@ static byte ConfigureSDCard()
 					Serial.println("DEBUG: hd0.img is the wrong size.  Most likely it is corrupt.");
 #endif
 					rwFailure = true;
-					statusRegisters[activeDrive][0] |= REG1_RW_FAULT;
-					statusRegisters[activeDrive][1] |= REG2_RW_UNSAFE;
+					statusRegisters[currentDrive][0] |= REG1_RW_FAULT;
+					statusRegisters[currentDrive][1] |= REG2_RW_UNSAFE;
 					gpio_set_mask(1 << FAULT);
 				}
 
@@ -340,7 +341,7 @@ HD::HD()
 {
 }
 
-byte HD::Setup()
+void HD::Setup()
 {
 	// Setup PIO 0 state machines
 	uint offset = pio_add_program(read_pio, &read_data_program);
@@ -378,7 +379,7 @@ byte HD::Setup()
 	statusRegisters[activeDrive][0] |= REG1_REZEROING & REG1_SEEKING;
 	
 #ifdef DEBUG
-	Serial.print("DEBUG: Waiting for disk to \"spin up\".");
+	Serial.println("DEBUG: Waiting for disk to \"spin up\".");
 #endif
 	
 	setupHandshake = true;
@@ -392,11 +393,10 @@ byte HD::Setup()
 #ifdef DEBUG
 	Serial.println("DEBUG: Disk is finished \"spinning up\".");
 #endif
-	
-	return existingDrives;
+
 }
 
-void HD::Setup1()
+byte HD::Setup1()
 {
 	while (!setupHandshake) ;
 	
@@ -413,13 +413,19 @@ void HD::Setup1()
 	ITimer.attachInterruptInterval(833.5, SectorIndexPulseISR);
 	
 	// Setup SD card access
-	existingDrives = ConfigureSDCard();
+	existingDrives = 1; // ConfigureSDCard();
+#ifdef DEBUG
+	Serial.println("DEBUG: Drive Identification Bitmap = " + String(existingDrives, HEX));
+#endif
 	if (existingDrives)
 	{	
 		for (activeDrive = 0; activeDrive < 8; ++activeDrive)
 		{
 			if ((existingDrives & (1 << activeDrive)) != 0)
 			{
+#ifdef DEBUG
+				Serial.println("DEBUG: Initializing Drive " + String(activeDrive) + ".") ;
+#endif
 				cylinderAddressRegister[activeDrive] = 0;
 				headAddressRegister[activeDrive] = 0;
 
@@ -434,6 +440,8 @@ void HD::Setup1()
 	}
 	
 	setupHandshake = false;
+	
+	return existingDrives;
 }
 
 static void setIncomingCylinderAddressHigh(byte data)
@@ -469,6 +477,7 @@ void HD::loop1()
 		}
 	}
 	
+
 	if ((statusRegisters[activeDrive][0] & REG1_SEEKING) != 0)
 	{
 		if (headAddressRegister[activeDrive] != incomingHeadAddress[activeDrive] || cylinderAddressRegister[activeDrive] != incomingCylinderAddress[activeDrive])
@@ -525,7 +534,7 @@ void HD::sendCommand(byte command, byte data)
 	case 0:
 		if ((existingDrives & (1 << getUnitID(data))) != 0)
 		{
-			if (activeDrive != getUnitID(data))
+			if (activeDrive != getUnitID(data) || isSelected == false)
 			{	
 #ifdef DEBUG
 				if (isSelected)
@@ -546,6 +555,7 @@ void HD::sendCommand(byte command, byte data)
 #endif
 			}
 			
+			activeDrive = getUnitID(data);
 			activeDrive = getUnitID(data);
 			setIncomingHeadAddress(data);
 			setIncomingCylinderAddressHigh(data);

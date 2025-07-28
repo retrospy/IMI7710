@@ -3,6 +3,8 @@
 
 HD hd;
 
+volatile byte existingDrives = 0;
+
 void setup()
 {	
 	// Setup internal control signals
@@ -25,9 +27,9 @@ void setup()
 	Serial.println("DEBUG: Waiting for disk to \"spin up\".");
 #endif
 	
-	auto existingDrives = hd.Setup();
-	setDataBusToOutput();
-	writeDataBus(existingDrives);
+	hd.Setup();
+	//setDataBusToOutput();
+	//writeDataBus(existingDrives);
 	
 #ifdef DEBUG
 	Serial.printf("DEBUG: Disk is \"spun up\".  Starting Command Processor.\r\n");
@@ -37,7 +39,7 @@ void setup()
 	delay(500);
 	gpio_clr_mask(1 << DRV_ACK);
 	
-	setDataBusToInput();
+	//setDataBusToInput();
 	
 	// Mark setup finished, by lighting LED
 	gpio_init_mask(1 << LED_BUILTIN);
@@ -48,7 +50,7 @@ void setup()
 
 void setup1()
 {
-	hd.Setup1();
+	existingDrives = hd.Setup1();
 }
 
 void setDataBusToOutput()
@@ -102,11 +104,23 @@ void loop()
 			writeDataBus(result);
 		}
 	}
+#ifdef DEBUG
+	Serial.println("DEBUG: Raising DRIVE ACK.");
+#endif
+	
 	SET_PIN_HIGH(DRV_ACK) ;	
 
+#ifdef DEBUG
+	Serial.println("DEBUG: Waiting for Strobe to lower.");
+#endif
+	
 	while(IS_PIN_HIGH(CMD_STROBE)) ;
 	
 	setDataBusToInput() ;
+	
+#ifdef DEBUG
+	Serial.println("DEBUG: Lowering DRIVE ACK.");
+#endif
 	
 	SET_PIN_LOW(DRV_ACK) ;
 }
