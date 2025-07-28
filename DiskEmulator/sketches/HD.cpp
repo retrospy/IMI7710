@@ -413,7 +413,7 @@ byte HD::Setup1()
 	ITimer.attachInterruptInterval(833.5, SectorIndexPulseISR);
 	
 	// Setup SD card access
-	existingDrives = 1; // ConfigureSDCard();
+	existingDrives = ConfigureSDCard();
 #ifdef DEBUG
 	Serial.println("DEBUG: Drive Identification Bitmap = " + String(existingDrives, HEX));
 #endif
