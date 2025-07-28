@@ -226,18 +226,11 @@ void loop()
 #endif
 	
 	SET_PIN_HIGH(CMD_ACK);
-	
-#ifdef DEBUG
-	Serial.println("DEBUG: Waiting for Strobe to lower.");
-#endif
-	
+
 	while (IS_PIN_HIGH(CMD_STROBE)) ;
 	
 	setDataBusToRead();
 	
-#ifdef DEBUG
-	Serial.println("DEBUG: Lowering ACK.");
-#endif
 	SET_PIN_LOW(CMD_ACK);
 	
 	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);

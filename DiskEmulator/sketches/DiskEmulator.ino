@@ -104,23 +104,12 @@ void loop()
 			writeDataBus(result);
 		}
 	}
-#ifdef DEBUG
-	Serial.println("DEBUG: Raising DRIVE ACK.");
-#endif
 	
 	SET_PIN_HIGH(DRV_ACK) ;	
-
-#ifdef DEBUG
-	Serial.println("DEBUG: Waiting for Strobe to lower.");
-#endif
 	
 	while(IS_PIN_HIGH(CMD_STROBE)) ;
 	
 	setDataBusToInput() ;
-	
-#ifdef DEBUG
-	Serial.println("DEBUG: Lowering DRIVE ACK.");
-#endif
 	
 	SET_PIN_LOW(DRV_ACK) ;
 }
