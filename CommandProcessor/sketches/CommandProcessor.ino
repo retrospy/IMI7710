@@ -235,5 +235,5 @@ void loop()
 	
 	gpio_clr_mask(1 << ENABLE_READ_TRIG | 1 << ENABLE_WRITE_TRIG);
 	
-	SET_PIN_LOW(1 << BUSY_LED);
+	SET_PIN_LOW(BUSY_LED);
 }
